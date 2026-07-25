@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}StockSys{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef7ff', 100: '#d8ecff', 200: '#b9ddff', 300: '#89c9ff',
+              400: '#52abff', 500: '#2a88ff', 600: '#1468f5', 700: '#0d52e1',
+              800: '#1143b6', 900: '#143b8f', 950: '#112557',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  </style>
+</head>
+<body class="h-full bg-gray-50 flex flex-col">
+
+  <nav class="bg-white shadow-sm border-b border-gray-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-3">
+          <a href="{% url 'index' %}" class="flex items-center gap-3">
+            <div class="bg-brand-600 text-white p-2 rounded-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </div>
+            <span class="text-xl font-bold text-gray-900">StockSys</span>
+          </a>
+        </div>
+        <div class="flex items-center gap-4">
+          {% if user.is_authenticated %}
+          <div class="hidden sm:flex items-center gap-6">
+            <a href="{% url 'dashboard' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Dashboard</a>
+            <a href="{% url 'producto_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Productos</a>
+            <a href="{% url 'categoria_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Categorías</a>
+          </div>
+          <div class="flex items-center gap-3 border-l border-gray-200 pl-4">
+            <span class="text-sm text-gray-500">{{ user.get_full_name|default:user.username }}</span>
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="text-sm font-medium text-red-500 hover:text-red-700 transition">Salir</button>
+            </form>
+          </div>
+          {% else %}
+          <a href="{% url 'login' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
+            Iniciar Sesión
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-1">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="border-t border-gray-200 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <p class="text-sm text-gray-400 text-center">&copy; 2026 StockSys - Sistema de Control de Stock</p>
+    </div>
+  </footer>
+
+</body>
+</html>

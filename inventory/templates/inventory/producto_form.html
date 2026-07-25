@@ -1,0 +1,87 @@
+{% extends "inventory/base.html" %}
+
+{% block title %}{% if producto %}Editar Producto{% else %}Agregar Producto{% endif %}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100">
+  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+      <a href="{% url 'producto_lista' %}" class="text-sm text-brand-600 hover:text-brand-700 font-medium">&larr; Volver a Productos</a>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+      <h2 class="text-xl font-bold text-gray-900 mb-1">{% if producto %}Editar Producto{% else %}Agregar Producto{% endif %}</h2>
+      <p class="text-sm text-gray-500 mb-6">{% if producto %}Actualizá los datos del producto{% else %}Agregá un nuevo producto al inventario{% endif %}</p>
+
+      {% if messages %}
+      {% for message in messages %}
+      <div class="bg-{% if message.tags == 'success' %}green{% else %}red{% endif %}-50 border border-{% if message.tags == 'success' %}green{% else %}red{% endif %}-200 text-{% if message.tags == 'success' %}green{% else %}red{% endif %}-700 text-sm rounded-lg px-4 py-3 mb-4">
+        {{ message }}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label for="id_nombre" class="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+          <input type="text" name="nombre" id="id_nombre" value="{{ producto.nombre|default:'' }}" required
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="id_codigo_barras" class="block text-sm font-medium text-gray-700 mb-1">Código de Barras</label>
+            <input type="text" name="codigo_barras" id="id_codigo_barras" value="{{ producto.codigo_barras|default:'' }}"
+                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+          <div>
+            <label for="id_categoria" class="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+            <select name="categoria" id="id_categoria"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+              <option value="">Sin categoría</option>
+              {% for cat in categorias %}
+              <option value="{{ cat.pk }}" {% if producto.categoria and producto.categoria.pk == cat.pk %}selected{% endif %}>{{ cat.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label for="id_descripcion" class="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+          <textarea name="descripcion" id="id_descripcion" rows="3"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">{{ producto.descripcion|default:'' }}</textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="id_precio_costo" class="block text-sm font-medium text-gray-700 mb-1">Precio Costo ($)</label>
+            <input type="number" name="precio_costo" id="id_precio_costo" value="{{ producto.precio_costo|default:'0' }}" min="0" step="0.01"
+                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+          <div>
+            <label for="id_precio_venta" class="block text-sm font-medium text-gray-700 mb-1">Precio Venta ($)</label>
+            <input type="number" name="precio_venta" id="id_precio_venta" value="{{ producto.precio_venta|default:'0' }}" min="0" step="0.01"
+                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label for="id_stock_actual" class="block text-sm font-medium text-gray-700 mb-1">Stock Actual</label>
+            <input type="number" name="stock_actual" id="id_stock_actual" value="{{ producto.stock_actual|default:'0' }}" min="0"
+                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+          <div>
+            <label for="id_stock_minimo" class="block text-sm font-medium text-gray-700 mb-1">Stock Mínimo (alerta)</label>
+            <input type="number" name="stock_minimo" id="id_stock_minimo" value="{{ producto.stock_minimo|default:'5' }}" min="0"
+                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+          </div>
+        </div>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="bg-brand-600 text-white font-semibold px-6 py-2.5 rounded-lg hover:bg-brand-700 transition">
+            {% if producto %}Guardar Cambios{% else %}Agregar Producto{% endif %}
+          </button>
+          <a href="{% url 'producto_lista' %}" class="text-sm text-gray-500 hover:text-gray-700 font-medium">Cancelar</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
