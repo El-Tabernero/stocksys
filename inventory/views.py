@@ -34,7 +34,8 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect('index')
-
+def nosotros(request):
+    return render(request, 'inventory/nosotros.html')
 
 @login_required(login_url='login')
 def dashboard(request):
