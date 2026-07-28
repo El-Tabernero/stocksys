@@ -1,0 +1,147 @@
+{% extends "inventory/base.html" %}
+
+{% block title %}Nosotros{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    
+    <!-- Encabezado Principal -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">Quiénes Somos</h1>
+      <p class="text-gray-500 mt-1">Realizado por dos estudiantes de la Tecnicatura Universitaria en Programación.</p>
+      <p class="text-gray-500 mt-1">Conocé más sobre nuestra plataforma y la visión del proyecto.</p>
+    </div>
+
+    <!-- Banner Hero / Presentación -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-8">
+      <div class="max-w-3xl">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-brand-50 text-brand-700 mb-4">
+          Control de Inventario SaaS
+        </span>
+        <h2 class="text-2xl font-extrabold text-gray-900 tracking-tight sm:text-3xl mb-4">
+          Impulsamos la gestión inteligente de stock para tu negocio.
+        </h2>
+        <p class="text-gray-600 text-base leading-relaxed">
+          Diseñamos una herramienta ágil, intuitiva y segura para que comerciantes y empresas mantengan el control total de sus productos en tiempo real, sin complicaciones técnicas ni planillas interminables.
+        </p>
+      </div>
+    </div>
+
+    <!-- Misión, Visión, Valores (3 Columnas) -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      
+      <!-- Misión -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Nuestra Misión</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">
+          Simplificar la administración operativa diaria ofreciendo trazabilidad clara, alertas oportunas de stock y métricas confiables.
+        </p>
+      </div>
+
+      <!-- Visión -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="w-12 h-12 bg-green-50 text-green-600 rounded-lg flex items-center justify-center mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Nuestra Visión</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">
+          Ser el aliado tecnológico predilecto de las Pymes en crecimiento, facilitando su escalabilidad mediante software de calidad accesible.
+        </p>
+      </div>
+
+      <!-- Seguridad & Aislación -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div class="w-12 h-12 bg-purple-50 text-purple-600 rounded-lg flex items-center justify-center mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">Compromiso de Datos</h3>
+        <p class="text-gray-500 text-sm leading-relaxed">
+          Privacidad y privacidad primero. Cada cliente opera en un entorno totalmente aislado, garantizando confidencialidad absoluta de su catálogo e historial.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Sección de Tecnología / Pilares -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 mb-8 overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">¿Qué nos distingue?</h2>
+      </div>
+      <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-sm">
+              1
+            </div>
+            <div>
+              <h4 class="font-medium text-gray-900 text-sm">Historial de Movimientos Imodificable</h4>
+              <p class="text-gray-500 text-xs mt-1">Registramos cada entrada, salida y ajuste con usuario, fecha y motivo para auditorías sin fisuras.</p>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-sm">
+              2
+            </div>
+            <div>
+              <h4 class="font-medium text-gray-900 text-sm">Alertas Tempranas de Stock</h4>
+              <p class="text-gray-500 text-xs mt-1">Configuración personalizada de stock mínimo por producto para prevenir quiebres de inventario.</p>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-sm">
+              3
+            </div>
+            <div>
+              <h4 class="font-medium text-gray-900 text-sm">Arquitectura Multi-tenant</h4>
+              <p class="text-gray-500 text-xs mt-1">Acceso seguro desde cualquier dispositivo manteniendo aislados los rubros e ítems de cada organización.</p>
+            </div>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-sm">
+              4
+            </div>
+            <div>
+              <h4 class="font-medium text-gray-900 text-sm">Interfaz Rápida y Limpia</h4>
+              <p class="text-gray-500 text-xs mt-1">Diseñada para cargar velozmente en navegadores web de computadoras y dispositivos móviles.</p>
+            </div>
+            <div class="flex gap-5">
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-brand-50 text-brand-600 font-bold flex items-center justify-center text-sm">
+              5
+            </div>
+            <div>
+              <h4 class="font-medium text-gray-900 text-sm">Actualizaciones Constantes</h4>
+              <p class="text-gray-500 text-xs mt-1">Mantenimiento regular y mejoras continuas para ofrecer la mejor experiencia de usuarios.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Banner de Contacto / Soporte -->
+    <div class="bg-gray-900 rounded-xl shadow-sm text-white p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <div>
+        <h3 class="text-xl font-bold">¿Necesitás asistencia o tenés sugerencias?</h3>
+        <p class="text-gray-400 text-sm mt-1">Nuestro equipo de soporte está disponible para acompañarte en la migración de tu catálogo.</p>
+      </div>
+      <a href="mailto:soporte@tuempresa.com" class="bg-brand-600 hover:bg-brand-700 text-white font-medium text-sm px-5 py-2.5 rounded-lg transition shrink-0">
+        Contactar Soporte
+      </a>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

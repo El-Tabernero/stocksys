@@ -1,5 +1,13 @@
 from django.contrib import admin
-from .models import Empresa, PerfilUsuario, Categoria, Producto, MovimientoStock
+from .models import (
+    Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
+    Producto, MovimientoStock,
+)
+
+
+class OpcionAtributoInline(admin.TabularInline):
+    model = OpcionAtributo
+    extra = 1
 
 
 @admin.register(Empresa)
@@ -22,11 +30,30 @@ class CategoriaAdmin(admin.ModelAdmin):
     search_fields = ['nombre']
 
 
+@admin.register(Atributo)
+class AtributoAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'empresa']
+    list_filter = ['empresa']
+    search_fields = ['nombre']
+    inlines = [OpcionAtributoInline]
+
+
+@admin.register(OpcionAtributo)
+class OpcionAtributoAdmin(admin.ModelAdmin):
+    list_display = ['atributo', 'valor', 'get_empresa']
+    list_filter = ['atributo__empresa']
+
+    def get_empresa(self, obj):
+        return obj.atributo.empresa.nombre
+    get_empresa.short_description = 'Empresa'
+
+
 @admin.register(Producto)
 class ProductoAdmin(admin.ModelAdmin):
     list_display = ['nombre', 'codigo_barras', 'categoria', 'empresa', 'stock_actual', 'precio_venta', 'stock_minimo']
     list_filter = ['empresa', 'categoria']
     search_fields = ['nombre', 'codigo_barras']
+    filter_horizontal = ['opciones']
 
     def save_model(self, request, obj, form, change):
         obj.full_clean()

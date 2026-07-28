@@ -1,10 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import F, Q, Count
-from .models import Empresa, PerfilUsuario, Categoria, Producto, MovimientoStock
+from .models import (
+    Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
+    Producto, MovimientoStock,
+)
 
 
 def index(request):
@@ -65,6 +68,7 @@ def producto_lista(request):
     empresa = perfil.empresa
     query = request.GET.get('q', '').strip()
     cat_id = request.GET.get('categoria', '')
+    op_ids = request.GET.getlist('opcion')
 
     productos = Producto.objects.filter(empresa=empresa).select_related('categoria')
     if query:
@@ -73,15 +77,22 @@ def producto_lista(request):
         )
     if cat_id:
         productos = productos.filter(categoria_id=cat_id)
+    if op_ids:
+        for op_id in op_ids:
+            productos = productos.filter(opciones__id=op_id)
 
     categorias = Categoria.objects.filter(empresa=empresa)
+    atributos = Atributo.objects.filter(empresa=empresa).prefetch_related('opciones')
     cat_seleccionada = int(cat_id) if cat_id else None
+    ops_seleccionadas = [int(x) for x in op_ids]
 
     context = {
-        'productos': productos,
+        'productos': productos.distinct(),
         'query': query,
         'categorias': categorias,
+        'atributos': atributos,
         'cat_seleccionada': cat_seleccionada,
+        'ops_seleccionadas': ops_seleccionadas,
     }
     return render(request, 'inventory/producto_lista.html', context)
 
@@ -91,6 +102,7 @@ def producto_agregar(request):
     perfil = request.user.perfil
     empresa = perfil.empresa
     categorias = Categoria.objects.filter(empresa=empresa)
+    atributos = Atributo.objects.filter(empresa=empresa).prefetch_related('opciones')
 
     if request.method == 'POST':
         nombre = request.POST.get('nombre', '').strip()
@@ -101,16 +113,19 @@ def producto_agregar(request):
         precio_venta = request.POST.get('precio_venta', 0)
         stock_actual = request.POST.get('stock_actual', 0)
         stock_minimo = request.POST.get('stock_minimo', 5)
+        opcion_ids = request.POST.getlist('opciones')
 
         if not nombre:
             messages.error(request, 'El nombre del producto es obligatorio.')
-            return render(request, 'inventory/producto_form.html', {'categorias': categorias})
+            return render(request, 'inventory/producto_form.html', {
+                'categorias': categorias, 'atributos': atributos,
+            })
 
         categoria = None
         if categoria_id:
             categoria = get_object_or_404(Categoria, pk=categoria_id, empresa=empresa)
 
-        Producto.objects.create(
+        producto = Producto.objects.create(
             empresa=empresa,
             nombre=nombre,
             codigo_barras=codigo_barras or None,
@@ -121,10 +136,18 @@ def producto_agregar(request):
             stock_actual=int(stock_actual),
             stock_minimo=int(stock_minimo),
         )
+
+        opciones_validas = OpcionAtributo.objects.filter(
+            atributo__empresa=empresa, pk__in=opcion_ids
+        )
+        producto.opciones.set(opciones_validas)
+
         messages.success(request, f'Producto "{nombre}" creado correctamente.')
         return redirect('producto_lista')
 
-    return render(request, 'inventory/producto_form.html', {'categorias': categorias})
+    return render(request, 'inventory/producto_form.html', {
+        'categorias': categorias, 'atributos': atributos,
+    })
 
 
 @login_required(login_url='login')
@@ -133,6 +156,7 @@ def producto_editar(request, pk):
     empresa = perfil.empresa
     producto = get_object_or_404(Producto, pk=pk, empresa=empresa)
     categorias = Categoria.objects.filter(empresa=empresa)
+    atributos = Atributo.objects.filter(empresa=empresa).prefetch_related('opciones')
 
     if request.method == 'POST':
         producto.nombre = request.POST.get('nombre', '').strip()
@@ -151,13 +175,26 @@ def producto_editar(request, pk):
 
         if not producto.nombre:
             messages.error(request, 'El nombre del producto es obligatorio.')
-            return render(request, 'inventory/producto_form.html', {'producto': producto, 'categorias': categorias})
+            return render(request, 'inventory/producto_form.html', {
+                'producto': producto, 'categorias': categorias, 'atributos': atributos,
+            })
 
         producto.save()
+
+        opcion_ids = request.POST.getlist('opciones')
+        opciones_validas = OpcionAtributo.objects.filter(
+            atributo__empresa=empresa, pk__in=opcion_ids
+        )
+        producto.opciones.set(opciones_validas)
+
         messages.success(request, f'Producto "{producto.nombre}" actualizado correctamente.')
         return redirect('producto_lista')
 
-    return render(request, 'inventory/producto_form.html', {'producto': producto, 'categorias': categorias})
+    opciones_actuales = set(producto.opciones.values_list('pk', flat=True))
+    return render(request, 'inventory/producto_form.html', {
+        'producto': producto, 'categorias': categorias, 'atributos': atributos,
+        'opciones_actuales': opciones_actuales,
+    })
 
 
 @login_required(login_url='login')
@@ -247,3 +284,97 @@ def categoria_eliminar(request, pk):
         return redirect('categoria_lista')
 
     return render(request, 'inventory/categoria_eliminar.html', {'categoria': categoria})
+
+
+@login_required(login_url='login')
+def atributo_lista(request):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+    atributos = Atributo.objects.filter(empresa=empresa).annotate(
+        cantidad_opciones=Count('opciones'),
+        cantidad_productos=Count('productos'),
+    )
+    return render(request, 'inventory/atributo_lista.html', {'atributos': atributos})
+
+
+@login_required(login_url='login')
+def atributo_agregar(request):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre del atributo es obligatorio.')
+            return render(request, 'inventory/atributo_form.html')
+
+        if Atributo.objects.filter(empresa=empresa, nombre__iexact=nombre).exists():
+            messages.error(request, f'El atributo "{nombre}" ya existe.')
+            return render(request, 'inventory/atributo_form.html')
+
+        atributo = Atributo.objects.create(empresa=empresa, nombre=nombre)
+
+        opciones_raw = request.POST.getlist('opcion')
+        for valor in opciones_raw:
+            valor = valor.strip()
+            if valor:
+                OpcionAtributo.objects.create(atributo=atributo, valor=valor)
+
+        messages.success(request, f'Atributo "{nombre}" creado correctamente.')
+        return redirect('atributo_lista')
+
+    return render(request, 'inventory/atributo_form.html')
+
+
+@login_required(login_url='login')
+def atributo_editar(request, pk):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+    atributo = get_object_or_404(Atributo, pk=pk, empresa=empresa)
+
+    if request.method == 'POST':
+        nombre = request.POST.get('nombre', '').strip()
+
+        if not nombre:
+            messages.error(request, 'El nombre del atributo es obligatorio.')
+            return render(request, 'inventory/atributo_form.html', {'atributo': atributo})
+
+        if Atributo.objects.filter(empresa=empresa, nombre__iexact=nombre).exclude(pk=pk).exists():
+            messages.error(request, f'El atributo "{nombre}" ya existe.')
+            return render(request, 'inventory/atributo_form.html', {'atributo': atributo})
+
+        atributo.nombre = nombre
+        atributo.save()
+
+        opcion_ids_existentes = [int(x) for x in request.POST.getlist('opcion_ids')]
+        opciones_raw = request.POST.getlist('opcion')
+        nuevas_opciones = []
+        for valor in opciones_raw:
+            valor = valor.strip()
+            if valor:
+                op, _ = OpcionAtributo.objects.get_or_create(atributo=atributo, valor=valor)
+                nuevas_opciones.append(op.pk)
+
+        atributo.opciones.exclude(pk__in=nuevas_opciones).delete()
+
+        messages.success(request, f'Atributo "{nombre}" actualizado correctamente.')
+        return redirect('atributo_lista')
+
+    opciones = atributo.opciones.all()
+    return render(request, 'inventory/atributo_form.html', {'atributo': atributo, 'opciones': opciones})
+
+
+@login_required(login_url='login')
+def atributo_eliminar(request, pk):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+    atributo = get_object_or_404(Atributo, pk=pk, empresa=empresa)
+
+    if request.method == 'POST':
+        nombre = atributo.nombre
+        atributo.delete()
+        messages.success(request, f'Atributo "{nombre}" eliminado.')
+        return redirect('atributo_lista')
+
+    return render(request, 'inventory/atributo_eliminar.html', {'atributo': atributo})

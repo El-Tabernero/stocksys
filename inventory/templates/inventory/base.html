@@ -42,9 +42,13 @@
         <div class="flex items-center gap-4">
           {% if user.is_authenticated %}
           <div class="hidden sm:flex items-center gap-6">
+            <a href="{% url 'nosotros' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
+            Conócenos
+          </a>
             <a href="{% url 'dashboard' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Dashboard</a>
             <a href="{% url 'producto_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Productos</a>
             <a href="{% url 'categoria_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Categorías</a>
+            <a href="{% url 'atributo_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Atributos</a>
           </div>
           <div class="flex items-center gap-3 border-l border-gray-200 pl-4">
             <span class="text-sm text-gray-500">{{ user.get_full_name|default:user.username }}</span>
@@ -54,6 +58,9 @@
             </form>
           </div>
           {% else %}
+          <a href="{% url 'nosotros' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
+            Conócenos
+          </a>
           <a href="{% url 'login' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
             Iniciar Sesión
           </a>

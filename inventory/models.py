@@ -39,9 +39,35 @@ class Categoria(models.Model):
         return f"{self.nombre} ({self.empresa.nombre})"
 
 
+class Atributo(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='atributos')
+    nombre = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ('empresa', 'nombre')
+        verbose_name_plural = "Atributos"
+
+    def __str__(self):
+        return f"{self.nombre} ({self.empresa.nombre})"
+
+
+class OpcionAtributo(models.Model):
+    atributo = models.ForeignKey(Atributo, on_delete=models.CASCADE, related_name='opciones')
+    valor = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ('atributo', 'valor')
+        verbose_name_plural = "Opciones de Atributos"
+        ordering = ['atributo', 'valor']
+
+    def __str__(self):
+        return f"{self.atributo.nombre}: {self.valor}"
+
+
 class Producto(models.Model):
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='productos')
     categoria = models.ForeignKey(Categoria, on_delete=models.PROTECT, related_name='productos', blank=True, null=True)
+    opciones = models.ManyToManyField(OpcionAtributo, blank=True, related_name='productos')
 
     codigo_barras = models.CharField(max_length=50, blank=True, null=True)
     nombre = models.CharField(max_length=150)
@@ -62,6 +88,16 @@ class Producto(models.Model):
     def clean(self):
         if self.categoria and self.categoria.empresa_id != self.empresa_id:
             raise ValidationError("La categoría seleccionada no pertenece a esta empresa.")
+
+    @property
+    def atributos_agrupados(self):
+        resultado = {}
+        for op in self.opciones.select_related('atributo').all():
+            nombre = op.atributo.nombre
+            if nombre not in resultado:
+                resultado[nombre] = []
+            resultado[nombre].append(op.valor)
+        return resultado
 
 
 class MovimientoStock(models.Model):
