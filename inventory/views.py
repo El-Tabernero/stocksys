@@ -293,7 +293,7 @@ def atributo_lista(request):
     empresa = perfil.empresa
     atributos = Atributo.objects.filter(empresa=empresa).annotate(
         cantidad_opciones=Count('opciones'),
-        cantidad_productos=Count('productos'),
+        cantidad_productos=Count('opciones__productos'),
     )
     return render(request, 'inventory/atributo_lista.html', {'atributos': atributos})
 
