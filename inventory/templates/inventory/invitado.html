@@ -1,0 +1,52 @@
+{% extends "inventory/base.html" %}
+
+{% block title %}Acceso de Invitado{% endblock %}
+
+{% block content %}
+<div class="min-h-[60vh] flex items-center justify-center px-4">
+  <div class="w-full max-w-md">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+      <div class="text-center mb-6">
+        <div class="bg-amber-100 text-amber-600 p-3 rounded-xl inline-block mb-4">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-900">Modo Invitado</h2>
+        <p class="text-gray-500 text-sm mt-1">Ingresá la clave para explorar la demo por 10 minutos</p>
+      </div>
+
+      {% if messages %}
+      <div class="space-y-2 mb-4">
+        {% for message in messages %}
+        <div class="{% if message.tags == 'error' %}bg-red-50 border-red-200 text-red-700{% else %}bg-green-50 border-green-200 text-green-700{% endif %} border text-sm rounded-lg px-4 py-3">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label for="id_guest_key" class="block text-sm font-medium text-gray-900 mb-1">Clave de invitado</label>
+          <input type="text" name="guest_key" id="id_guest_key" required autofocus autocomplete="off"
+                 placeholder="Ingresá la clave aquí"
+                 class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-mono tracking-wide focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition">
+        </div>
+        <button type="submit" class="w-full bg-brand-600 text-white font-semibold py-2.5 rounded-lg hover:bg-brand-700 transition">
+          Entrar como invitado
+        </button>
+      </form>
+
+      <div class="mt-4 pt-4 border-t border-gray-200 text-center">
+        <a href="{% url 'login' %}" class="text-sm font-medium text-gray-500 hover:text-gray-800 transition">&larr; Volver a iniciar sesión</a>
+      </div>
+    </div>
+
+    <p class="text-center text-xs text-gray-400 mt-6">
+      El acceso expira automáticamente a los 10 minutos.
+    </p>
+  </div>
+</div>
+{% endblock %}

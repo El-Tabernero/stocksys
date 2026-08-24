@@ -17,11 +17,44 @@
         <a href="{% url 'atributo_agregar' %}" class="bg-white border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition">
           + Atributo
         </a>
+        {% if not es_invitado %}
         <a href="{% url 'producto_agregar' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
           + Producto
         </a>
+        {% endif %}
       </div>
     </div>
+
+    {% if not es_invitado %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-semibold text-gray-900">Clave de Invitado</h2>
+          <p class="text-sm text-gray-500 mt-1">Compartí esta clave para que un visitante pruebe la app durante 10 minutos. Podrá crear categorías y atributos, y explorar los datos.</p>
+        </div>
+        <form method="post" action="{% url 'generar_clave_invitado' %}">
+          {% csrf_token %}
+          <button type="submit" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
+            {{ clave_activa|yesno:"Regenerar,Generar" }}
+          </button>
+        </form>
+      </div>
+
+      {% if clave_activa %}
+      <div data-guest-expired>
+        <div class="mt-4 flex flex-wrap items-center gap-3 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+          <span class="font-mono text-lg font-semibold text-gray-900 tracking-wide select-all">{{ clave_activa.key }}</span>
+          <button type="button" onclick="copyToClipboard('{{ clave_activa.key }}')"
+                  class="text-xs font-medium text-brand-600 hover:text-brand-800 transition">Copiar</button>
+          <span class="text-sm text-gray-500">Vence en <span data-countdown="{{ clave_restante_seg|default:0 }}">--:--</span></span>
+        </div>
+      </div>
+      <p data-guest-expired class="hidden text-sm text-gray-400 mt-3">La clave expiró. Generá una nueva.</p>
+      {% else %}
+      <p class="text-sm text-gray-400 mt-3">Todavía no hay una clave activa. Generá una para compartir el acceso de demostración.</p>
+      {% endif %}
+    </div>
+    {% endif %}
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -116,8 +149,10 @@
               </td>
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
+                  {% if not es_invitado %}
                   <a href="{% url 'stock_movimiento' p.pk %}" class="text-xs font-medium text-brand-600 hover:text-brand-800">Stock</a>
                   <a href="{% url 'producto_editar' p.pk %}" class="text-xs font-medium text-gray-500 hover:text-gray-700">Editar</a>
+                  {% endif %}
                 </div>
               </td>
             </tr>

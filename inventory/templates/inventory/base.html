@@ -4,9 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}StockSys{% endblock %}</title>
+  <script>
+  (function () {
+    try {
+      var t = localStorage.getItem('stocksys-theme');
+      if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
+      darkMode: 'class',
       theme: {
         extend: {
           colors: {
@@ -22,6 +33,54 @@
   </script>
   <style>
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+
+    /* Light theme: softer, less white glare */
+    body { background-color: #e9edf3 !important; }
+    .bg-gray-50, .bg-gray-100 { background-color: #e9edf3 !important; }
+    .bg-gray-200 { background-color: #dfe5ec !important; }
+    .bg-white { background-color: #f7f9fc !important; }
+
+    /* Dark theme */
+    html.dark { color-scheme: dark; color: #e5e7eb; }
+    html.dark body { background-color: #111827 !important; }
+    html.dark .bg-white { background-color: #1f2937 !important; }
+    html.dark .bg-gray-50, html.dark .bg-gray-100 { background-color: #111827 !important; }
+    html.dark .bg-gray-200 { background-color: #374151 !important; }
+    html.dark .border-gray-100, html.dark .border-gray-200 { border-color: #374151 !important; }
+    html.dark .divide-gray-100 > * + * { border-top-color: #374151 !important; }
+    html.dark .text-gray-400 { color: #9ca3af !important; }
+    html.dark .text-gray-500 { color: #9ca3af !important; }
+    html.dark .text-gray-600 { color: #d1d5db !important; }
+    html.dark .text-gray-700 { color: #d1d5db !important; }
+    html.dark .text-gray-900 { color: #f9fafb !important; }
+    html.dark .text-red-400, html.dark .text-red-500, html.dark .text-red-600, html.dark .text-red-700, html.dark .text-red-800 { color: #f87171 !important; }
+    html.dark .text-green-600, html.dark .text-green-700, html.dark .text-green-800 { color: #4ade80 !important; }
+    html.dark .text-yellow-500, html.dark .text-yellow-600, html.dark .text-yellow-700, html.dark .text-yellow-800 { color: #fbbf24 !important; }
+    html.dark .text-amber-600, html.dark .text-amber-700, html.dark .text-amber-800 { color: #fbbf24 !important; }
+    html.dark .text-brand-600, html.dark .text-brand-700, html.dark .text-brand-800 { color: #93c5fd !important; }
+    html.dark .text-blue-600, html.dark .text-purple-600 { color: #93c5fd !important; }
+    html.dark .bg-green-50, html.dark .bg-green-100 { background-color: #14532d !important; color: #bbf7d0 !important; }
+    html.dark .bg-red-50, html.dark .bg-red-100 { background-color: #7f1d1d !important; color: #fecaca !important; }
+    html.dark .bg-yellow-50, html.dark .bg-yellow-100 { background-color: #78350f !important; color: #fde68a !important; }
+    html.dark .bg-amber-50, html.dark .bg-amber-100 { background-color: #78350f !important; color: #fde68a !important; }
+    html.dark .bg-blue-50 { background-color: #1e3a8a !important; color: #bfdbfe !important; }
+    html.dark .bg-purple-50 { background-color: #4c1d95 !important; color: #ddd6fe !important; }
+    html.dark .bg-brand-50, html.dark .bg-brand-100 { background-color: #172554 !important; color: #93c5fd !important; }
+    html.dark .hover\:bg-gray-50:hover { background-color: #1f2937 !important; }
+    html.dark .hover\:bg-gray-100:hover { background-color: #1f2937 !important; }
+    html.dark .hover\:bg-gray-200:hover { background-color: #374151 !important; }
+    html.dark input, html.dark textarea, html.dark select {
+      background-color: #111827 !important;
+      color: #f9fafb !important;
+      border-color: #4b5563 !important;
+    }
+    html.dark input::placeholder, html.dark textarea::placeholder { color: #6b7280; }
+    html.dark .peer-checked\:bg-green-50:checked ~ * { background-color: #14532d !important; }
+    html.dark .peer-checked\:bg-red-50:checked ~ * { background-color: #7f1d1d !important; }
+    html.dark .peer-checked\:bg-yellow-50:checked ~ * { background-color: #78350f !important; }
+    html.dark .peer-checked\:text-green-700:checked ~ * { color: #bbf7d0 !important; }
+    html.dark .peer-checked\:text-red-700:checked ~ * { color: #fecaca !important; }
+    html.dark .peer-checked\:text-yellow-700:checked ~ * { color: #fde68a !important; }
   </style>
 </head>
 <body class="h-full bg-gray-50 flex flex-col">
@@ -40,6 +99,15 @@
           </a>
         </div>
         <div class="flex items-center gap-4">
+          <button type="button" onclick="toggleTheme()" aria-label="Cambiar tema"
+                  class="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition" title="Cambiar tema">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 hidden dark:block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </button>
           {% if user.is_authenticated %}
           <div class="hidden sm:flex items-center gap-6">
             <a href="{% url 'nosotros' %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">
@@ -51,7 +119,16 @@
             <a href="{% url 'atributo_lista' %}" class="text-sm font-medium text-gray-500 hover:text-gray-900 transition">Atributos</a>
           </div>
           <div class="flex items-center gap-3 border-l border-gray-200 pl-4">
+            {% if es_invitado %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Invitado · <span data-countdown="{{ guest_restante_seg|default:600 }}">--:--</span>
+            </span>
+            {% else %}
             <span class="text-sm text-gray-500">{{ user.get_full_name|default:user.username }}</span>
+            {% endif %}
             <form method="post" action="{% url 'logout' %}">
               {% csrf_token %}
               <button type="submit" class="text-sm font-medium text-red-500 hover:text-red-700 transition">Salir</button>
@@ -79,6 +156,47 @@
       <p class="text-sm text-gray-400 text-center">&copy; 2026 StockSys - Sistema de Control de Stock</p>
     </div>
   </footer>
+
+  <script>
+  (function () {
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function format(sec) {
+      return pad(Math.floor(sec / 60)) + ':' + pad(sec % 60);
+    }
+    document.querySelectorAll('[data-countdown]').forEach(function (el) {
+      var total = Math.max(0, parseInt(el.getAttribute('data-countdown'), 10) || 0);
+      var expiresAt = Date.now() + total * 1000;
+      function tick() {
+        var rem = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+        el.textContent = format(rem);
+        if (rem <= 0) {
+          document.querySelectorAll('[data-guest-expired]').forEach(function (t) {
+            t.classList.add('hidden');
+          });
+        }
+      }
+      tick();
+      setInterval(tick, 1000);
+    });
+    window.copyToClipboard = function (text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+    };
+    window.toggleTheme = function () {
+      var root = document.documentElement;
+      var dark = root.classList.toggle('dark');
+      localStorage.setItem('stocksys-theme', dark ? 'dark' : 'light');
+    };
+  })();
+  </script>
 
 </body>
 </html>

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
-    Producto, MovimientoStock,
+    Producto, MovimientoStock, GuestKey,
 )
 
 
@@ -65,3 +65,11 @@ class MovimientoStockAdmin(admin.ModelAdmin):
     list_display = ['producto', 'tipo', 'cantidad', 'motivo', 'usuario', 'empresa', 'fecha']
     list_filter = ['tipo', 'empresa']
     readonly_fields = ['fecha']
+
+
+@admin.register(GuestKey)
+class GuestKeyAdmin(admin.ModelAdmin):
+    list_display = ['key', 'empresa', 'created_by', 'created_at', 'expires_at', 'es_valida']
+    list_filter = ['empresa']
+    search_fields = ['key']
+    readonly_fields = ['created_at']

@@ -1,13 +1,18 @@
+import secrets
+from datetime import timedelta
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
 from django.db.models import F, Q, Count
+from django.utils import timezone
 from .models import (
     Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
-    Producto, MovimientoStock,
+    Producto, MovimientoStock, GuestKey,
 )
+from .decorators import bloquear_invitados
 
 
 def index(request):
@@ -34,6 +39,72 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect('index')
+
+
+def _obtener_usuario_invitado(empresa):
+    username = f'invitado_{empresa.pk}'
+    user = User.objects.filter(username=username).first()
+    if user is None:
+        user = User.objects.create_user(username=username, password=None)
+        PerfilUsuario.objects.create(user=user, empresa=empresa, rol=PerfilUsuario.Rol.EMPLEADO)
+    return user
+
+
+def _iniciar_sesion_invitado(request, clave):
+    user = _obtener_usuario_invitado(clave.empresa)
+    user.backend = 'django.contrib.auth.backends.ModelBackend'
+    login(request, user)
+    request.session['is_guest'] = True
+    request.session['guest_expires_at'] = (timezone.now() + timedelta(minutes=10)).isoformat()
+    request.session['guest_intentos'] = 0
+    request.session.set_expiry(600)
+    messages.success(request, f'Sesión de invitado iniciada en "{clave.empresa.nombre}". Tenés 10 minutos de acceso.')
+    return redirect('dashboard')
+
+
+def invitado(request):
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        raw_key = request.POST.get('guest_key', '').strip()
+        intentos = request.session.get('guest_intentos', 0)
+
+        if intentos >= 5:
+            messages.error(request, 'Demasiados intentos fallidos. Esperá 10 minutos e intentá de nuevo.')
+            return redirect('index')
+
+        if not raw_key:
+            messages.error(request, 'Ingresá la clave de invitado.')
+        else:
+            clave = GuestKey.objects.select_related('empresa').filter(key=raw_key).first()
+            if clave and clave.es_valida:
+                return _iniciar_sesion_invitado(request, clave)
+            intentos += 1
+            request.session['guest_intentos'] = intentos
+            request.session.set_expiry(600)
+            messages.error(request, 'Clave de invitado inválida o vencida.')
+
+    return render(request, 'inventory/invitado.html')
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def generar_clave_invitado(request):
+    empresa = request.user.perfil.empresa
+    if request.method == 'POST':
+        GuestKey.objects.filter(empresa=empresa).delete()
+        raw_key = secrets.token_urlsafe(24)
+        GuestKey.objects.create(
+            empresa=empresa,
+            created_by=request.user,
+            key=raw_key,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        messages.success(request, 'Clave de invitado generada. Vence en 10 minutos.')
+    return redirect('dashboard')
+
+
 def nosotros(request):
     return render(request, 'inventory/nosotros.html')
 
@@ -52,6 +123,8 @@ def dashboard(request):
     productos_recientes = productos[:5]
     movimientos_recientes = MovimientoStock.objects.filter(empresa=empresa).select_related('producto')[:10]
 
+    clave_activa = GuestKey.objects.filter(empresa=empresa, expires_at__gt=timezone.now()).order_by('-created_at').first()
+
     context = {
         'total_productos': total_productos,
         'en_stock': en_stock,
@@ -59,6 +132,8 @@ def dashboard(request):
         'sin_stock': sin_stock,
         'productos_recientes': productos_recientes,
         'movimientos_recientes': movimientos_recientes,
+        'clave_activa': clave_activa,
+        'clave_restante_seg': clave_activa.segundos_restantes if clave_activa else None,
     }
     return render(request, 'inventory/dashboard.html', context)
 
@@ -69,7 +144,9 @@ def producto_lista(request):
     empresa = perfil.empresa
     query = request.GET.get('q', '').strip()
     cat_id = request.GET.get('categoria', '')
-    op_ids = request.GET.getlist('opcion')
+    op_ids = [x for x in request.GET.getlist('opcion') if x]
+    estado = request.GET.get('estado', '')
+    orden = request.GET.get('orden', '')
 
     productos = Producto.objects.filter(empresa=empresa).select_related('categoria')
     if query:
@@ -81,6 +158,21 @@ def producto_lista(request):
     if op_ids:
         for op_id in op_ids:
             productos = productos.filter(opciones__id=op_id)
+    if estado == 'en':
+        productos = productos.filter(stock_actual__gt=F('stock_minimo'))
+    elif estado == 'bajo':
+        productos = productos.filter(stock_actual__gt=0, stock_actual__lte=F('stock_minimo'))
+    elif estado == 'sin':
+        productos = productos.filter(stock_actual=0)
+
+    if orden == 'nombre':
+        productos = productos.order_by('nombre')
+    elif orden == 'precio':
+        productos = productos.order_by('-precio_venta')
+    elif orden == 'stock':
+        productos = productos.order_by('-stock_actual')
+    else:
+        productos = productos.order_by('-id')
 
     categorias = Categoria.objects.filter(empresa=empresa)
     atributos = Atributo.objects.filter(empresa=empresa).prefetch_related('opciones')
@@ -94,11 +186,14 @@ def producto_lista(request):
         'atributos': atributos,
         'cat_seleccionada': cat_seleccionada,
         'ops_seleccionadas': ops_seleccionadas,
+        'estado': estado,
+        'orden': orden,
     }
     return render(request, 'inventory/producto_lista.html', context)
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def producto_agregar(request):
     perfil = request.user.perfil
     empresa = perfil.empresa
@@ -152,6 +247,7 @@ def producto_agregar(request):
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def producto_editar(request, pk):
     perfil = request.user.perfil
     empresa = perfil.empresa
@@ -199,6 +295,7 @@ def producto_editar(request, pk):
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def stock_movimiento(request, pk):
     perfil = request.user.perfil
     empresa = perfil.empresa
@@ -273,6 +370,7 @@ def categoria_agregar(request):
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def categoria_eliminar(request, pk):
     perfil = request.user.perfil
     empresa = perfil.empresa
@@ -329,6 +427,7 @@ def atributo_agregar(request):
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def atributo_editar(request, pk):
     perfil = request.user.perfil
     empresa = perfil.empresa
@@ -367,6 +466,7 @@ def atributo_editar(request, pk):
 
 
 @login_required(login_url='login')
+@bloquear_invitados
 def atributo_eliminar(request, pk):
     perfil = request.user.perfil
     empresa = perfil.empresa

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 
 class Empresa(models.Model):
@@ -98,6 +99,32 @@ class Producto(models.Model):
                 resultado[nombre] = []
             resultado[nombre].append(op.valor)
         return resultado
+
+
+class GuestKey(models.Model):
+    DURACION = 10 * 60
+
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='claves_invitado')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    key = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = "Clave de invitado"
+        verbose_name_plural = "Claves de invitado"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Clave {self.key[:8]}… ({self.empresa.nombre})"
+
+    @property
+    def es_valida(self):
+        return self.expires_at > timezone.now()
+
+    @property
+    def segundos_restantes(self):
+        return max(0, int((self.expires_at - timezone.now()).total_seconds()))
 
 
 class MovimientoStock(models.Model):
