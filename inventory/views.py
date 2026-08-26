@@ -1,5 +1,6 @@
 import secrets
 from datetime import timedelta
+from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
@@ -13,6 +14,33 @@ from .models import (
     Producto, MovimientoStock, GuestKey,
 )
 from .decorators import bloquear_invitados
+
+
+def parse_precio(raw):
+    """Convierte formatos argentinos ($ 1.250.000,50) a Decimal-compatible."""
+    s = str(raw or '').strip().replace('$', '').replace(' ', '')
+    if not s:
+        return None
+    if ',' in s and '.' in s:
+        s = s.replace('.', '').replace(',', '.')
+    elif ',' in s:
+        s = s.replace(',', '.')
+    elif s.count('.') > 1:
+        s = s.replace('.', '')
+    else:
+        partes = s.split('.')
+        if len(partes) == 2 and len(partes[1]) == 3:
+            s = s.replace('.', '')
+    return s
+
+
+def _precio_o_error(request, raw, etiqueta):
+    valor_limpio = parse_precio(raw)
+    try:
+        return Decimal(valor_limpio) if valor_limpio else Decimal('0')
+    except InvalidOperation:
+        messages.error(request, f'Precio {etiqueta} inválido. Ejemplos válidos: 1500, 1.250.000 o 1250,50.')
+        return None
 
 
 def index(request):
@@ -205,8 +233,12 @@ def producto_agregar(request):
         codigo_barras = request.POST.get('codigo_barras', '').strip()
         descripcion = request.POST.get('descripcion', '').strip()
         categoria_id = request.POST.get('categoria', '')
-        precio_costo = request.POST.get('precio_costo', 0)
-        precio_venta = request.POST.get('precio_venta', 0)
+        precio_costo = _precio_o_error(request, request.POST.get('precio_costo', ''), 'costo')
+        precio_venta = _precio_o_error(request, request.POST.get('precio_venta', ''), 'venta')
+        if precio_costo is None or precio_venta is None:
+            return render(request, 'inventory/producto_form.html', {
+                'categorias': categorias, 'atributos': atributos,
+            })
         stock_actual = request.POST.get('stock_actual', 0)
         stock_minimo = request.POST.get('stock_minimo', 5)
         opcion_ids = request.POST.getlist('opciones')
@@ -259,8 +291,15 @@ def producto_editar(request, pk):
         producto.nombre = request.POST.get('nombre', '').strip()
         producto.codigo_barras = request.POST.get('codigo_barras', '').strip() or None
         producto.descripcion = request.POST.get('descripcion', '').strip()
-        producto.precio_costo = request.POST.get('precio_costo', 0)
-        producto.precio_venta = request.POST.get('precio_venta', 0)
+
+        precio_costo = _precio_o_error(request, request.POST.get('precio_costo', ''), 'costo')
+        precio_venta = _precio_o_error(request, request.POST.get('precio_venta', ''), 'venta')
+        if precio_costo is None or precio_venta is None:
+            return render(request, 'inventory/producto_form.html', {
+                'producto': producto, 'categorias': categorias, 'atributos': atributos,
+            })
+        producto.precio_costo = precio_costo
+        producto.precio_venta = precio_venta
         producto.stock_actual = int(request.POST.get('stock_actual', 0))
         producto.stock_minimo = int(request.POST.get('stock_minimo', 5))
 
@@ -335,6 +374,34 @@ def stock_movimiento(request, pk):
     return render(request, 'inventory/stock_movimiento.html', {
         'producto': producto, 'movimientos': movimientos,
     })
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def stock_rapido(request, pk):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+    producto = get_object_or_404(Producto, pk=pk, empresa=empresa)
+    if request.method == 'POST':
+        accion = request.POST.get('accion')
+        if accion == 'vender':
+            if producto.stock_actual <= 0:
+                messages.error(request, f'"{producto.nombre}" sin stock disponible.')
+            else:
+                MovimientoStock.objects.create(
+                    empresa=empresa, producto=producto, usuario=request.user,
+                    tipo=MovimientoStock.TipoMovimiento.SALIDA,
+                    cantidad=1, motivo='Venta rápida',
+                )
+                messages.success(request, f'Venta registrada: "{producto.nombre}". Stock: {producto.stock_actual}')
+        elif accion == 'reponer':
+            MovimientoStock.objects.create(
+                empresa=empresa, producto=producto, usuario=request.user,
+                tipo=MovimientoStock.TipoMovimiento.ENTRADA,
+                cantidad=1, motivo='Reposición rápida',
+            )
+            messages.success(request, f'Reposición registrada: "{producto.nombre}". Stock: {producto.stock_actual}')
+    return redirect('producto_lista')
 
 
 @login_required(login_url='login')

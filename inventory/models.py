@@ -147,6 +147,9 @@ class MovimientoStock(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            self.producto.stock_actual += self.cantidad
+            delta = abs(self.cantidad)
+            if self.tipo == self.TipoMovimiento.SALIDA:
+                delta = -delta
+            self.producto.stock_actual += delta
             self.producto.save()
         super().save(*args, **kwargs)

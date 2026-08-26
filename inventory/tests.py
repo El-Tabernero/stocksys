@@ -1,11 +1,12 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Empresa, PerfilUsuario, Categoria, Producto, GuestKey
+from .models import Empresa, PerfilUsuario, Categoria, Producto, GuestKey, MovimientoStock
 
 
 @override_settings(
@@ -87,3 +88,136 @@ class GuestKeyTests(TestCase):
         response = self.client.post(reverse('categoria_eliminar', args=[categoria.pk]))
         self.assertRedirects(response, reverse('categoria_lista'))
         self.assertFalse(Categoria.objects.filter(pk=categoria.pk).exists())
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class StockDirectionTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='T')
+        self.owner = User.objects.create_user('o', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.producto = Producto.objects.create(
+            empresa=self.empresa, nombre='Clavos', stock_actual=10,
+        )
+
+    def test_entrada_increase_stock(self):
+        MovimientoStock.objects.create(
+            empresa=self.empresa, producto=self.producto,
+            usuario=self.owner, tipo='IN', cantidad=5,
+        )
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 15)
+
+    def test_salida_decrease_stock(self):
+        MovimientoStock.objects.create(
+            empresa=self.empresa, producto=self.producto,
+            usuario=self.owner, tipo='OUT', cantidad=4,
+        )
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 6)
+
+    def test_ajuste_absolute_value(self):
+        MovimientoStock.objects.create(
+            empresa=self.empresa, producto=self.producto,
+            usuario=self.owner, tipo='ADJ', cantidad=3,
+        )
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 13)
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class PrecioParseTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='P')
+        self.owner = User.objects.create_user('u', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.client.login(username='u', password='p12345')
+
+    def _post_precio(self, value):
+        return self.client.post(reverse('producto_agregar'), {
+            'nombre': 'Tornillo', 'precio_venta': value, 'precio_costo': value,
+            'stock_actual': 1, 'stock_minimo': 1,
+        })
+
+    def test_plain_integer(self):
+        self._post_precio('1200')
+        p = Producto.objects.get(nombre='Tornillo')
+        self.assertEqual(p.precio_venta, 1200)
+
+    def test_thousands_dots(self):
+        self._post_precio('1.200.000')
+        p = Producto.objects.get(nombre='Tornillo')
+        self.assertEqual(p.precio_venta, 1200000)
+
+    def test_comma_decimal(self):
+        self._post_precio('1500,50')
+        p = Producto.objects.get(nombre='Tornillo')
+        self.assertEqual(p.precio_venta, 1500.5)
+
+    def test_dots_and_commas(self):
+        self._post_precio('1.250.000,99')
+        p = Producto.objects.get(nombre='Tornillo')
+        self.assertEqual(p.precio_venta, Decimal('1250000.99'))
+
+    def test_three_digit_dot_is_thousands(self):
+        self._post_precio('1.200')
+        p = Producto.objects.get(nombre='Tornillo')
+        self.assertEqual(p.precio_venta, 1200)
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class StockRapidoTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='R')
+        self.owner = User.objects.create_user('seller', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.producto = Producto.objects.create(
+            empresa=self.empresa, nombre='Tuerca', stock_actual=5,
+        )
+        self.client.login(username='seller', password='p12345')
+
+    def test_vender_decreases_stock(self):
+        self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'vender'})
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 4)
+        self.assertEqual(
+            MovimientoStock.objects.get(producto=self.producto).tipo,
+            MovimientoStock.TipoMovimiento.SALIDA,
+        )
+
+    def test_reponer_increase_stock(self):
+        self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'reponer'})
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 6)
+        self.assertEqual(
+            MovimientoStock.objects.get(producto=self.producto).tipo,
+            MovimientoStock.TipoMovimiento.ENTRADA,
+        )
+
+    def test_vender_sin_stock_blocked(self):
+        self.producto.stock_actual = 0
+        self.producto.save()
+        self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'vender'})
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 0)
+        self.assertFalse(MovimientoStock.objects.filter(producto=self.producto).exists())
+
+    def test_invitado_blocked(self):
+        self.client.logout()
+        clave = GuestKey.objects.create(
+            empresa=self.empresa, created_by=self.owner,
+            key='guest-test', expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        self.client.post(reverse('invitado'), {'guest_key': clave.key})
+        self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'vender'})
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 5)
