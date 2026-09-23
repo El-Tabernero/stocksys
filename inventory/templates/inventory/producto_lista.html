@@ -1,7 +1,6 @@
 {% extends "inventory/base.html" %}
-{% load formato %}
 
-{% block title %}Productos{% endblock %}
+{% block title %}StockSys - Productos{% endblock %}
 
 {% block content %}
 <div class="min-h-screen bg-gray-100">
@@ -107,7 +106,7 @@
                 {% endwith %}
               </td>
               <td class="px-6 py-4 text-sm text-gray-700">{{ p.stock_actual }}</td>
-              <td class="px-6 py-4 text-sm text-gray-700">${{ p.precio_venta|currency_ar }}</td>
+              <td class="px-6 py-4 text-sm text-gray-700">${{ p.precio_venta }}</td>
               <td class="px-6 py-4">
                 {% if p.stock_actual > p.stock_minimo %}
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">OK</span>
@@ -119,23 +118,8 @@
               </td>
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
-                  {% if not es_invitado %}
-                  <form method="post" action="{% url 'stock_rapido' p.pk %}" class="inline">
-                    {% csrf_token %}
-                    <input type="hidden" name="accion" value="vender">
-                    <button type="submit" title="Vender 1" {% if p.stock_actual == 0 %}disabled{% endif %}
-                            class="text-xs font-bold px-2 py-1 rounded bg-red-50 text-red-600 hover:bg-red-100 disabled:opacity-40 disabled:cursor-not-allowed">−1</button>
-                  </form>
-                  <form method="post" action="{% url 'stock_rapido' p.pk %}" class="inline">
-                    {% csrf_token %}
-                    <input type="hidden" name="accion" value="reponer">
-                    <button type="submit" title="Reponer 1"
-                            class="text-xs font-bold px-2 py-1 rounded bg-green-50 text-green-700 hover:bg-green-100">+1</button>
-                  </form>
-                  <span class="w-px h-3 bg-gray-300"></span>
                   <a href="{% url 'stock_movimiento' p.pk %}" class="text-xs font-medium text-brand-600 hover:text-brand-800">Stock</a>
                   <a href="{% url 'producto_editar' p.pk %}" class="text-xs font-medium text-gray-500 hover:text-gray-700">Editar</a>
-                  {% endif %}
                 </div>
               </td>
             </tr>

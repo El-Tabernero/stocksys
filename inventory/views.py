@@ -1,14 +1,17 @@
+import csv
 import secrets
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.contrib import messages
-from django.db.models import F, Q, Count
+from django.db.models import F, Q, Count, Sum
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from .models import (
     Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
     Producto, MovimientoStock, GuestKey,
@@ -402,6 +405,240 @@ def stock_rapido(request, pk):
             )
             messages.success(request, f'Reposición registrada: "{producto.nombre}". Stock: {producto.stock_actual}')
     return redirect('producto_lista')
+
+
+def _rangos_reportes():
+    hoy = timezone.localdate()
+    return {
+        'hoy': (hoy, hoy),
+        '7d': (hoy - timedelta(days=6), hoy),
+        '30d': (hoy - timedelta(days=29), hoy),
+    }
+
+
+def _reporte_contexto(request, empresa, desde, hasta):
+    filtro = Q(empresa=empresa, fecha__date__range=(desde, hasta))
+    salidas = MovimientoStock.objects.filter(filtro, tipo=MovimientoStock.TipoMovimiento.SALIDA)
+    entradas = MovimientoStock.objects.filter(filtro, tipo=MovimientoStock.TipoMovimiento.ENTRADA)
+
+    unidades_vendidas = salidas.aggregate(t=Sum('cantidad'))['t'] or 0
+    unidades_compradas = entradas.aggregate(t=Sum('cantidad'))['t'] or 0
+
+    ventas_por_producto = {
+        r['producto_id']: r for r in salidas
+        .values('producto_id').annotate(unidades=Sum('cantidad'))
+    }
+    plata_vendida = Decimal('0')
+    for producto in Producto.objects.filter(empresa=empresa, id__in=ventas_por_producto.keys()):
+        plata_vendida += producto.precio_venta * ventas_por_producto[producto.id]['unidades']
+
+    compras_por_producto = {
+        r['producto_id']: r for r in entradas
+        .values('producto_id').annotate(unidades=Sum('cantidad'))
+    }
+    plata_comprada = Decimal('0')
+    for producto in Producto.objects.filter(empresa=empresa, id__in=compras_por_producto.keys()):
+        plata_comprada += producto.precio_costo * compras_por_producto[producto.id]['unidades']
+
+    productos_sin_stock = []
+    for producto in Producto.objects.filter(empresa=empresa, stock_actual=0).select_related('categoria'):
+        v = ventas_por_producto.get(producto.id, {}).get('unidades', 0)
+        productos_sin_stock.append({'producto': producto, 'vendido': v})
+    productos_sin_stock.sort(key=lambda x: x['vendido'], reverse=True)
+
+    productos_stock_bajo = list(
+        Producto.objects.filter(empresa=empresa, stock_actual__gt=0, stock_actual__lte=F('stock_minimo'))
+        .select_related('categoria').order_by('stock_actual')
+    )
+
+    productos_top = sorted(
+        (p for p in Producto.objects.filter(empresa=empresa, id__in=ventas_por_producto.keys()).select_related('categoria')
+         if ventas_por_producto[p.id]['unidades'] > 0),
+        key=lambda p: ventas_por_producto[p.id]['unidades'], reverse=True,
+    )[:10]
+
+    productos_con_stock_ids = Producto.objects.filter(empresa=empresa, stock_actual__gt=0).values_list('id', flat=True)
+    vendidos_ids = set(ventas_por_producto.keys())
+    productos_sin_rotacion = list(
+        Producto.objects.filter(empresa=empresa, id__in=productos_con_stock_ids).exclude(id__in=vendidos_ids)
+        .select_related('categoria').order_by('nombre')
+    )
+
+    return {
+        'desde': desde, 'hasta': hasta,
+        'unidades_vendidas': unidades_vendidas, 'unidades_compradas': unidades_compradas,
+        'plata_vendida': plata_vendida, 'plata_comprada': plata_comprada,
+        'margen': plata_vendida - plata_comprada,
+        'stock_actual_total': Producto.objects.filter(empresa=empresa).aggregate(t=Sum('stock_actual'))['t'] or 0,
+        'productos_sin_stock': productos_sin_stock,
+        'productos_stock_bajo': productos_stock_bajo,
+        'productos_top': productos_top,
+        'ventas_por_producto': ventas_por_producto,
+        'productos_sin_rotacion': productos_sin_rotacion,
+    }
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def reporte(request):
+    perfil = request.user.perfil
+    empresa = perfil.empresa
+    hoy = timezone.localdate()
+    rango = request.GET.get('rango', '30d')
+    rangos = _rangos_reportes()
+
+    if rango in rangos:
+        desde, hasta = rangos[rango]
+    else:
+        desde = parse_date(request.GET.get('desde', '') or '') or hoy
+        hasta = parse_date(request.GET.get('hasta', '') or '') or hoy
+        if desde > hasta:
+            desde, hasta = hasta, desde
+        rango = 'libre'
+
+    contexto = _reporte_contexto(request, empresa, desde, hasta)
+    contexto['rango'] = rango
+    contexto['rangos'] = rangos
+    contexto['rango_opciones'] = [
+        ('hoy', 'Hoy'),
+        ('7d', '7 días'),
+        ('30d', '30 días'),
+    ]
+
+    export = request.GET.get('export')
+    if export == 'csv':
+        return _reporte_csv(contexto)
+    if export == 'pdf':
+        return _reporte_pdf(contexto, empresa)
+
+    return render(request, 'inventory/reporte.html', contexto)
+
+
+def _reporte_csv(contexto):
+    filas = []
+    for item in contexto['productos_sin_stock']:
+        filas.append(['SIN STOCK', item['producto'].nombre, item['producto'].codigo_barras or '', item['vendido'], ''])
+    for p in contexto['productos_stock_bajo']:
+        filas.append(['STOCK BAJO', p.nombre, p.codigo_barras or '', p.stock_actual, ''])
+    for p in contexto['productos_top']:
+        filas.append(['MÁS VENDIDO', p.nombre, p.codigo_barras or '', contexto['ventas_por_producto'][p.id]['unidades'], str(p.precio_venta)])
+    for p in contexto['productos_sin_rotacion']:
+        filas.append(['SIN ROTACIÓN', p.nombre, p.codigo_barras or '', '', ''])
+
+    def generar():
+        import io
+        buffer = io.StringIO()
+        buffer.write('\ufeff')
+        writer = csv.writer(buffer)
+        writer.writerow(['Categoría', 'Producto', 'Código', 'Cantidad', 'Precio venta ($)'])
+        for f in filas:
+            writer.writerow(f)
+        yield buffer.getvalue()
+
+    nombre = f"reporte_{contexto['desde']}_{contexto['hasta']}.csv"
+    response = StreamingHttpResponse(generar(), content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+def _reporte_pdf(contexto, empresa):
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import HexColor
+
+    nombre = f"reporte_{contexto['desde']}_{contexto['hasta']}"
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}.pdf"'
+
+    c = canvas.Canvas(response, pagesize=A4)
+    ancho, alto = A4
+    margen = 18 * mm
+    y = alto - 20 * mm
+
+    c.setFont('Helvetica-Bold', 16)
+    c.drawString(margen, y, f'Reporte de Stock y Ventas - {empresa.nombre}')
+    y -= 12
+
+    c.setFont('Helvetica', 10)
+    c.setFillColor(HexColor('#666666'))
+    c.drawString(margen, y, f"Período: {contexto['desde']} al {contexto['hasta']}")
+    y -= 18
+
+    moneda = lambda v: f"${Decimal(v):,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    def seccion(titulo):
+        nonlocal y
+        if y < 40 * mm:
+            c.showPage()
+            y = alto - 20 * mm
+        c.setFont('Helvetica-Bold', 12)
+        c.setFillColor(HexColor('#4f46e5'))
+        c.drawString(margen, y, titulo)
+        y -= 14
+
+    def fila(cols, bold=False):
+        nonlocal y
+        c.setFont('Helvetica-Bold' if bold else 'Helvetica', 9)
+        c.setFillColor(HexColor('#000000'))
+        x = margen
+        for col, w in cols:
+            c.drawString(x, y, str(col))
+            x += w
+        y -= 12
+
+    def separador():
+        nonlocal y
+        y -= 3
+        c.setStrokeColor(HexColor('#e5e7eb'))
+        c.line(margen, y, ancho - margen, y)
+        y -= 6
+
+    c.setFont('Helvetica-Bold', 10)
+    for etiqueta, valor in [
+        ('Unidades vendidas', contexto['unidades_vendidas']),
+        ('Unidades compradas', contexto['unidades_compradas']),
+        ('Total vendido', moneda(contexto['plata_vendida'])),
+        ('Total comprado', moneda(contexto['plata_comprada'])),
+        ('Margen bruto', moneda(contexto['margen'])),
+        ('Stock actual total', contexto['stock_actual_total']),
+    ]:
+        c.drawString(margen, y, etiqueta)
+        c.drawRightString(ancho - margen, y, str(valor))
+        y -= 13
+    y -= 4
+
+    w = (ancho - 2 * margen) / 4
+    seccion('Productos sin stock (reponga YA)')
+    fila([('Producto', w * 2), ('Código', w), ('Vendido en el período', w)], bold=True)
+    separador()
+    for item in contexto['productos_sin_stock']:
+        fila([(item['producto'].nombre, w * 2), (item['producto'].codigo_barras or '-', w), (str(item['vendido']), w)])
+        separador()
+
+    seccion('Stock bajo')
+    fila([('Producto', w * 2), ('Código', w), ('Stock', w)], bold=True)
+    separador()
+    for p in contexto['productos_stock_bajo']:
+        fila([(p.nombre, w * 2), (p.codigo_barras or '-', w), (str(p.stock_actual), w)])
+        separador()
+
+    seccion('Top 10 más vendidos')
+    fila([('Producto', w * 2), ('Unidades', w), ('Precio venta', w)], bold=True)
+    separador()
+    for p in contexto['productos_top']:
+        unidades = contexto['ventas_por_producto'][p.id]['unidades']
+        fila([(p.nombre, w * 2), (str(unidades), w), (moneda(p.precio_venta), w)])
+        separador()
+
+    seccion('Sin rotación (no se vendió nada en el período)')
+    for p in contexto['productos_sin_rotacion']:
+        fila([(p.nombre, ancho - 2 * margen)])
+    if not contexto['productos_sin_rotacion']:
+        fila([('(ninguno)', ancho - 2 * margen)])
+
+    c.save()
+    return response
 
 
 @login_required(login_url='login')

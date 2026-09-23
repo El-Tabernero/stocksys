@@ -221,3 +221,99 @@ class StockRapidoTests(TestCase):
         self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'vender'})
         self.producto.refresh_from_db()
         self.assertEqual(self.producto.stock_actual, 5)
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class ReporteTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='R')
+        self.owner = User.objects.create_user('rep', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.client.login(username='rep', password='p12345')
+
+        self.a = Producto.objects.create(empresa=self.empresa, nombre='A', stock_actual=0, stock_minimo=3, precio_venta=10, precio_costo=6)
+        self.b = Producto.objects.create(empresa=self.empresa, nombre='B', stock_actual=1, stock_minimo=5, precio_venta=20, precio_costo=10)
+        self.c = Producto.objects.create(empresa=self.empresa, nombre='C', stock_actual=50, stock_minimo=5, precio_venta=100, precio_costo=40)
+
+        # La creación de movimientos muta stock; los movimientos registran la actividad del período.
+        MovimientoStock.objects.create(empresa=self.empresa, producto=self.a, usuario=self.owner, tipo='OUT', cantidad=2)
+        MovimientoStock.objects.create(empresa=self.empresa, producto=self.b, usuario=self.owner, tipo='OUT', cantidad=3)
+        MovimientoStock.objects.create(empresa=self.empresa, producto=self.b, usuario=self.owner, tipo='IN', cantidad=1)
+
+        # El reporte usa el stock_actual persistido para los listados de stock.
+        Producto.objects.filter(pk=self.a.pk).update(stock_actual=0)
+        Producto.objects.filter(pk=self.b.pk).update(stock_actual=1)
+        Producto.objects.filter(pk=self.c.pk).update(stock_actual=50)
+
+    def test_report_requiere_login(self):
+        self.client.logout()
+        r = self.client.get(reverse('reporte'))
+        self.assertIn(reverse('login'), r.url)
+
+    def test_report_invitado_bloqueado(self):
+        self.client.logout()
+        clave = GuestKey.objects.create(empresa=self.empresa, created_by=self.owner, key='g',
+                                        expires_at=timezone.now() + timedelta(minutes=10))
+        self.client.post(reverse('invitado'), {'guest_key': clave.key})
+        r = self.client.get(reverse('reporte'))
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(r.url, reverse('dashboard'))
+
+    def test_metricas(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d'})
+        self.assertEqual(r.context['unidades_vendidas'], 5)
+        self.assertEqual(r.context['unidades_compradas'], 1)
+        self.assertEqual(r.context['plata_vendida'], Decimal('80'))
+        self.assertEqual(r.context['plata_comprada'], Decimal('10'))
+
+    def test_sin_stock(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d'})
+        items = r.context['productos_sin_stock']
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['producto'].nombre, 'A')
+        self.assertEqual(items[0]['vendido'], 2)
+
+    def test_stock_bajo(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d'})
+        nombres = [p.nombre for p in r.context['productos_stock_bajo']]
+        self.assertIn('B', nombres)
+        self.assertNotIn('C', nombres)
+
+    def test_top_vendidos(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d'})
+        top = r.context['productos_top']
+        self.assertEqual([p.nombre for p in top], ['B', 'A'])
+
+    def test_sin_rotacion(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d'})
+        nombres = [p.nombre for p in r.context['productos_sin_rotacion']]
+        self.assertIn('C', nombres)
+        self.assertNotIn('A', nombres)
+        self.assertNotIn('B', nombres)
+
+    def test_rango_libre_filtra(self):
+        ayer = timezone.now() - timedelta(days=2)
+        MovimientoStock.objects.filter(producto=self.c).update(fecha=ayer)
+        # mover todas las ventas de hoy a un movimiento viejo filtrado fuera
+        MovimientoStock.objects.filter(producto__in=[self.a, self.b]).update(fecha=ayer)
+        r = self.client.get(reverse('reporte'), {'rango': 'libre', 'desde': '', 'hasta': ''})
+        # si no hay ventas en el rango libre (hoy), la C vendida ayer no cuenta
+        nombres = [p.nombre for p in r.context['productos_sin_rotacion']]
+        self.assertIn('C', nombres)
+
+    def test_csv_export(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d', 'export': 'csv'})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('text/csv', r['Content-Type'])
+        contenido = b''.join(r.streaming_content).decode('utf-8-sig')
+        self.assertIn('Producto', contenido)
+        self.assertIn('SIN STOCK', contenido)
+        self.assertIn('MÁS VENDIDO', contenido)
+
+    def test_pdf_export(self):
+        r = self.client.get(reverse('reporte'), {'rango': '30d', 'export': 'pdf'})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'application/pdf')

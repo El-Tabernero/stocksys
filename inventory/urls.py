@@ -7,6 +7,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('invitado/', views.invitado, name='invitado'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('reportes/', views.reporte, name='reporte'),
     path('dashboard/generar-clave-invitado/', views.generar_clave_invitado, name='generar_clave_invitado'),
     path('nosotros/', views.nosotros, name='nosotros'),
     path('productos/', views.producto_lista, name='producto_lista'),

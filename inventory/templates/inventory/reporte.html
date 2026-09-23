@@ -1,0 +1,159 @@
+{% extends "inventory/base.html" %}
+{% load formato %}
+
+{% block title %}StockSys - Reporte{% endblock %}
+
+{% block content %}
+<div class="min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Reporte de Stock y Ventas</h2>
+        <p class="text-sm text-gray-500 mt-1">{{ desde }} al {{ hasta }}</p>
+      </div>
+      <form method="get" class="flex items-center gap-2">
+        <input type="hidden" name="rango" value="{{ rango }}">
+        <button type="submit" name="export" value="csv"
+                class="bg-white border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition">Descargar CSV</button>
+        <button type="submit" name="export" value="pdf"
+                class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">Descargar PDF</button>
+      </form>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+      <form method="get" class="flex flex-wrap items-center gap-3">
+        <div class="flex items-center gap-1">
+          {% for val, etiqueta in rango_opciones %}
+          <a href="?rango={{ val }}"
+             class="px-3 py-1.5 rounded-lg text-sm font-medium transition {% if rango == val %}bg-brand-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">{{ etiqueta }}</a>
+          {% endfor %}
+        </div>
+        <div class="flex items-center gap-2 ml-auto">
+          <label class="text-sm text-gray-500">Desde
+            <input type="date" name="desde" value="{{ desde|date:'Y-m-d' }}"
+                   class="ml-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+          </label>
+          <label class="text-sm text-gray-500">Hasta
+            <input type="date" name="hasta" value="{{ hasta|date:'Y-m-d' }}"
+                   class="ml-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm">
+          </label>
+          <button type="submit" name="rango" value="libre"
+                  class="bg-gray-100 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-200 transition">Aplicar</button>
+        </div>
+      </form>
+    </div>
+
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Unidades vendidas</p>
+    <p class="text-xl font-bold text-white mt-2 tracking-tight">{{ unidades_vendidas }}</p>
+  </div>
+
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Unidades compradas</p>
+    <p class="text-xl font-bold text-white mt-2 tracking-tight">{{ unidades_compradas }}</p>
+  </div>
+
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total vendido</p>
+    <p class="text-sm sm:text-base xl:text-lg font-bold text-emerald-400 mt-2 tracking-tighter whitespace-nowrap">
+      ${{ plata_vendida|currency_ar }}
+    </p>
+  </div>
+
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Total comprado</p>
+    <p class="text-sm sm:text-base xl:text-lg font-bold text-gray-100 mt-2 tracking-tighter whitespace-nowrap">
+      ${{ plata_comprada|currency_ar }}
+    </p>
+  </div>
+
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Margen bruto</p>
+    <p class="text-sm sm:text-base xl:text-lg font-bold {% if margen >= 0 %}text-emerald-400{% else %}text-red-400{% endif %} mt-2 tracking-tighter whitespace-nowrap">
+      ${{ margen|currency_ar }}
+    </p>
+  </div>
+
+  <div class="bg-gray-800 border border-gray-700/60 rounded-xl p-3 flex flex-col items-center justify-center text-center shadow-sm min-w-0">
+    <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Stock actual total</p>
+    <p class="text-xl font-bold text-white mt-2 tracking-tight">{{ stock_actual_total }}</p>
+  </div>
+</div>
+
+    <div class="bg-red-50 border border-red-200 rounded-xl shadow-sm p-6 mb-8">
+      <h3 class="text-lg font-semibold text-red-800 mb-4">Productos sin stock <span class="text-sm font-normal">(reponé estos YA)</span></h3>
+      {% if productos_sin_stock %}
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-xs font-semibold text-red-500 uppercase">
+            <th class="py-2 pr-4">Producto</th>
+            <th class="py-2 pr-4">Código</th>
+            <th class="py-2 pr-4">Vendido en el período</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-red-100">
+          {% for item in productos_sin_stock %}
+          <tr>
+            <td class="py-2 pr-4 font-medium text-red-400">{{ item.producto.nombre }}</td>
+            <td class="py-2 pr-4 text-red-600">{{ item.producto.codigo_barras|default:"-" }}</td>
+            <td class="py-2 pr-4 text-red-700 font-semibold">{{ item.vendido }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-sm text-red-600">Sin stock vacío. ¡Bien!</p>
+      {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div class="bg-yellow-50 border border-yellow-200 rounded-xl shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-yellow-800 mb-4">Stock bajo</h3>
+        {% if productos_stock_bajo %}
+        <ul class="space-y-2 text-sm">
+          {% for p in productos_stock_bajo %}
+          <li class="flex justify-between">
+            <span class="font-medium text-yellow-400">{{ p.nombre }}</span>
+            <span class="text-yellow-700 font-semibold">{{ p.stock_actual }} (mín {{ p.stock_minimo }})</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-yellow-600">No hay productos con stock bajo.</p>
+        {% endif %}
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Top 10 más vendidos</h3>
+        {% if productos_top %}
+        <ol class="space-y-2 text-sm">
+          {% for p in productos_top %}
+          <li class="flex justify-between">
+            <span class="font-medium text-gray-900">{{ p.nombre }}</span>
+            <span class="text-gray-600">{{ ventas_por_producto|get_item:p.id }} uds · ${{ p.precio_venta|currency_ar }}</span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="text-sm text-gray-500">Sin ventas en el período.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Sin rotación</h3>
+      {% if productos_sin_rotacion %}
+      <p class="text-sm text-gray-500 mb-3">Productos con stock que no se vendieron nada en el período.</p>
+      <div class="flex flex-wrap gap-2">
+        {% for p in productos_sin_rotacion %}
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{{ p.nombre }}</span>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="text-sm text-gray-500">Todo lo que tenés en stock rotó en este período.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

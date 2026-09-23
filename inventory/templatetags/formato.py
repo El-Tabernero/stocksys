@@ -19,3 +19,11 @@ def currency_ar(value):
             formatted = '.' + formatted
         formatted = ch + formatted
     return f'{signo}{formatted},{decimales}'
+
+
+@register.filter
+def get_item(dictionary, key):
+    try:
+        return dictionary.get(key, {}).get('unidades', 0)
+    except AttributeError:
+        return dictionary.get(key, 0)
