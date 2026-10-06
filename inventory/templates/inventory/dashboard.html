@@ -31,7 +31,7 @@
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 class="text-lg font-semibold text-gray-900">Clave de Invitado</h2>
-          <p class="text-sm text-gray-500 mt-1">Compartí esta clave para que un visitante pruebe la app durante 10 minutos. Podrá crear categorías y atributos, y explorar los datos.</p>
+          <p class="text-sm text-gray-500 mt-1">Compartí esta clave para que un visitante pruebe la app durante 8 horas. Podrá crear categorías y atributos, y explorar los datos.</p>
         </div>
         <form method="post" action="{% url 'generar_clave_invitado' %}">
           {% csrf_token %}

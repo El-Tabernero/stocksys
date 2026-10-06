@@ -102,7 +102,7 @@ class Producto(models.Model):
 
 
 class GuestKey(models.Model):
-    DURACION = 10 * 60
+    DURACION = 8 * 60 * 60
 
     empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='claves_invitado')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)

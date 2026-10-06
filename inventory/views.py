@@ -86,10 +86,10 @@ def _iniciar_sesion_invitado(request, clave):
     user.backend = 'django.contrib.auth.backends.ModelBackend'
     login(request, user)
     request.session['is_guest'] = True
-    request.session['guest_expires_at'] = (timezone.now() + timedelta(minutes=10)).isoformat()
+    request.session['guest_expires_at'] = (timezone.now() + timedelta(hours=8)).isoformat()
     request.session['guest_intentos'] = 0
-    request.session.set_expiry(600)
-    messages.success(request, f'Sesión de invitado iniciada en "{clave.empresa.nombre}". Tenés 10 minutos de acceso.')
+    request.session.set_expiry(GuestKey.DURACION)
+    messages.success(request, f'Sesión de invitado iniciada en "{clave.empresa.nombre}". Tenés 8 horas de acceso.')
     return redirect('dashboard')
 
 
@@ -130,9 +130,9 @@ def generar_clave_invitado(request):
             empresa=empresa,
             created_by=request.user,
             key=raw_key,
-            expires_at=timezone.now() + timedelta(minutes=10),
+            expires_at=timezone.now() + timedelta(seconds=GuestKey.DURACION),
         )
-        messages.success(request, 'Clave de invitado generada. Vence en 10 minutos.')
+        messages.success(request, 'Clave de invitado generada. Vence en 8 horas.')
     return redirect('dashboard')
 
 

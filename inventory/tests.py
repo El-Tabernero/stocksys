@@ -31,7 +31,7 @@ class GuestKeyTests(TestCase):
             empresa=self.empresa,
             created_by=self.owner,
             key='clave-demo-123',
-            expires_at=timezone.now() + timedelta(minutes=10),
+            expires_at=timezone.now() + timedelta(seconds=GuestKey.DURACION),
         )
         self.client.post(reverse('invitado'), {'guest_key': clave.key})
 
@@ -43,7 +43,7 @@ class GuestKeyTests(TestCase):
         clave = self._generar_clave()
         self.assertIsNotNone(clave)
         self.assertTrue(clave.es_valida)
-        self.assertLessEqual(clave.segundos_restantes, 600)
+        self.assertLessEqual(clave.segundos_restantes, GuestKey.DURACION)
 
     def test_generar_clave_invitado_regenera(self):
         self._generar_clave()
@@ -56,7 +56,7 @@ class GuestKeyTests(TestCase):
         response = self.client.post(reverse('invitado'), {'guest_key': clave.key})
         self.assertRedirects(response, reverse('dashboard'))
         self.assertTrue(self.client.session.get('is_guest'))
-        self.assertEqual(self.client.session.get_expiry_age(), 600)
+        self.assertEqual(self.client.session.get_expiry_age(), GuestKey.DURACION)
 
     def test_login_invitado_con_clave_invalida(self):
         response = self.client.post(reverse('invitado'), {'guest_key': 'clave-inexistente'})
@@ -215,7 +215,7 @@ class StockRapidoTests(TestCase):
         self.client.logout()
         clave = GuestKey.objects.create(
             empresa=self.empresa, created_by=self.owner,
-            key='guest-test', expires_at=timezone.now() + timedelta(minutes=10),
+            key='guest-test', expires_at=timezone.now() + timedelta(seconds=GuestKey.DURACION),
         )
         self.client.post(reverse('invitado'), {'guest_key': clave.key})
         self.client.post(reverse('stock_rapido', args=[self.producto.pk]), {'accion': 'vender'})
@@ -256,7 +256,7 @@ class ReporteTests(TestCase):
     def test_report_invitado_bloqueado(self):
         self.client.logout()
         clave = GuestKey.objects.create(empresa=self.empresa, created_by=self.owner, key='g',
-                                        expires_at=timezone.now() + timedelta(minutes=10))
+                                        expires_at=timezone.now() + timedelta(seconds=GuestKey.DURACION))
         self.client.post(reverse('invitado'), {'guest_key': clave.key})
         r = self.client.get(reverse('reporte'))
         self.assertEqual(r.status_code, 302)
