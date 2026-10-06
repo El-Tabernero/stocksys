@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Empresa, PerfilUsuario, Categoria, Producto, GuestKey, MovimientoStock
+from .models import Empresa, PerfilUsuario, Categoria, Producto, ProductoImagen, GuestKey, MovimientoStock
 
 
 @override_settings(
@@ -426,3 +426,63 @@ class ProductoDetalleTests(TestCase):
             reverse('producto_imagen_eliminar', args=[self.producto.pk, imagen.pk]),
         )
         self.assertEqual(self.producto.imagenes.count(), 0)
+
+    def test_agregar_imagen_por_link(self):
+        self.client.login(username='detuser', password='p12345')
+        r = self.client.post(
+            reverse('producto_imagen_agregar', args=[self.producto.pk]),
+            {'url': 'https://i.imgur.com/abc123.png'},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.producto.imagenes.count(), 1)
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertContains(r, 'https://i.imgur.com/abc123.png')
+        self.assertContains(r, 'onerror=')
+        self.assertContains(r, 'i.imgur.com')
+
+    def test_link_esquema_invalido_rechazado(self):
+        self.client.login(username='detuser', password='p12345')
+        self.client.post(
+            reverse('producto_imagen_agregar', args=[self.producto.pk]),
+            {'url': 'ftp://servidor/foto.png'},
+        )
+        self.client.post(
+            reverse('producto_imagen_agregar', args=[self.producto.pk]),
+            {'url': 'esto-no-es-una-url'},
+        )
+        self.assertEqual(self.producto.imagenes.count(), 0)
+
+    def test_invitado_no_puede_agregar_link(self):
+        self._login_invitado()
+        self.client.post(
+            reverse('producto_imagen_agregar', args=[self.producto.pk]),
+            {'url': 'https://i.imgur.com/abc.png'},
+        )
+        self.assertEqual(self.producto.imagenes.count(), 0)
+
+    def test_src_y_origen_dual(self):
+        link = ProductoImagen.objects.create(
+            producto=self.producto, url='https://ejemplo.com/f.jpg',
+        )
+        self.assertEqual(link.src, 'https://ejemplo.com/f.jpg')
+        self.assertEqual(link.origen, 'ejemplo.com')
+
+        self.client.login(username='detuser', password='p12345')
+        img = self._SimpleUploadedFile('foto.png', self._png, content_type='image/png')
+        self.client.post(
+            reverse('producto_imagen_subir', args=[self.producto.pk]),
+            {'imagen': img},
+        )
+        archivo = self.producto.imagenes.exclude(pk=link.pk).first()
+        self.assertTrue(archivo.src.startswith('/media/productos/'))
+        self.assertEqual(archivo.origen, 'Archivo local')
+
+    def test_formularios_solo_owner(self):
+        self.client.login(username='detuser', password='p12345')
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertContains(r, reverse('producto_imagen_agregar', args=[self.producto.pk]))
+        self.assertContains(r, reverse('producto_imagen_subir', args=[self.producto.pk]))
+        self._login_invitado()
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertNotContains(r, reverse('producto_imagen_agregar', args=[self.producto.pk]))
+        self.assertNotContains(r, reverse('producto_imagen_subir', args=[self.producto.pk]))

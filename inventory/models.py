@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -103,12 +105,32 @@ class Producto(models.Model):
 
 class ProductoImagen(models.Model):
     producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='imagenes')
-    imagen = models.ImageField(upload_to='productos/')
+    url = models.URLField(max_length=500, blank=True, null=True)
+    imagen = models.ImageField(upload_to='productos/', blank=True, null=True)
     orden = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['orden', 'created_at']
+
+    @property
+    def src(self):
+        if self.url:
+            return self.url
+        if self.imagen:
+            return self.imagen.url
+        return None
+
+    @property
+    def origen(self):
+        if self.url:
+            try:
+                return urlparse(self.url).netloc
+            except ValueError:
+                return 'enlace externo'
+        if self.imagen:
+            return 'Archivo local'
+        return ''
 
     def __str__(self):
         return f"Imagen de {self.producto.nombre}"

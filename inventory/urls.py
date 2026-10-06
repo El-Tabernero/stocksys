@@ -16,6 +16,7 @@ urlpatterns = [
     path('productos/<int:pk>/editar/', views.producto_editar, name='producto_editar'),
     path('productos/<int:pk>/stock/', views.stock_movimiento, name='stock_movimiento'),
     path('productos/<int:pk>/stock-rapido/', views.stock_rapido, name='stock_rapido'),
+    path('productos/<int:pk>/imagenes/agregar/', views.producto_imagen_agregar, name='producto_imagen_agregar'),
     path('productos/<int:pk>/imagenes/subir/', views.producto_imagen_subir, name='producto_imagen_subir'),
     path('productos/<int:pk>/imagenes/<int:imagen_id>/eliminar/', views.producto_imagen_eliminar, name='producto_imagen_eliminar'),
     path('categorias/', views.categoria_lista, name='categoria_lista'),

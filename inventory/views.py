@@ -2,6 +2,7 @@ import csv
 import secrets
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
+from urllib.parse import urlparse
 
 from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -21,7 +22,23 @@ from .decorators import bloquear_invitados
 
 
 class ProductoImagenForm(forms.Form):
-    imagen = forms.ImageField(label='Imagen')
+    url = forms.URLField(
+        label='URL de la imagen',
+        widget=forms.URLInput(attrs={
+            'placeholder': 'https://ejemplo.com/foto.jpg',
+            'class': 'w-full sm:w-72 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none',
+        }),
+    )
+
+
+class ProductoArchivoForm(forms.Form):
+    imagen = forms.ImageField(
+        label='Imagen',
+        widget=forms.FileInput(attrs={
+            'accept': 'image/*',
+            'class': 'text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:border-0 file:rounded-lg file:bg-gray-100 file:text-gray-700 file:font-medium file:cursor-pointer hover:file:bg-gray-200',
+        }),
+    )
 
 
 def parse_precio(raw):
@@ -354,8 +371,28 @@ def producto_detalle(request, pk):
     return render(request, 'inventory/producto_detalle.html', {
         'producto': producto,
         'movimientos': movimientos,
-        'form_imagen': ProductoImagenForm(),
+        'form_url': ProductoImagenForm(),
+        'form_archivo': ProductoArchivoForm(),
     })
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def producto_imagen_agregar(request, pk):
+    perfil = request.user.perfil
+    producto = get_object_or_404(Producto, pk=pk, empresa=perfil.empresa)
+    if request.method == 'POST':
+        form = ProductoImagenForm(request.POST)
+        if form.is_valid():
+            url = form.cleaned_data['url']
+            if urlparse(url).scheme not in ('http', 'https'):
+                messages.error(request, 'La URL debe empezar con http:// o https://.')
+            else:
+                ProductoImagen.objects.create(producto=producto, url=url)
+                messages.success(request, 'Imagen agregada a la galería por link.')
+        else:
+            messages.error(request, 'Ingresá un link de imagen válido (debe empezar con http:// o https://).')
+    return redirect('producto_detalle', pk=pk)
 
 
 @login_required(login_url='login')
@@ -364,14 +401,14 @@ def producto_imagen_subir(request, pk):
     perfil = request.user.perfil
     producto = get_object_or_404(Producto, pk=pk, empresa=perfil.empresa)
     if request.method == 'POST':
-        form = ProductoImagenForm(request.POST, request.FILES)
+        form = ProductoArchivoForm(request.POST, request.FILES)
         if form.is_valid():
             imagen = form.cleaned_data['imagen']
             if imagen.size > 5 * 1024 * 1024:
                 messages.error(request, 'La imagen no puede superar los 5 MB.')
             else:
                 ProductoImagen.objects.create(producto=producto, imagen=imagen)
-                messages.success(request, 'Imagen agregada a la galería.')
+                messages.success(request, 'Imagen subida. Se guarda en el servidor.')
         else:
             messages.error(request, 'Imagen inválida. Formatos permitidos: JPG, PNG, WEBP.')
     return redirect('producto_detalle', pk=pk)
@@ -384,7 +421,8 @@ def producto_imagen_eliminar(request, pk, imagen_id):
     producto = get_object_or_404(Producto, pk=pk, empresa=perfil.empresa)
     imagen = get_object_or_404(ProductoImagen, pk=imagen_id, producto=producto)
     if request.method == 'POST':
-        imagen.imagen.delete(save=False)
+        if imagen.imagen:
+            imagen.imagen.delete(save=False)
         imagen.delete()
         messages.success(request, 'Imagen eliminada de la galería.')
     return redirect('producto_detalle', pk=pk)
