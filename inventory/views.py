@@ -12,11 +12,16 @@ from django.contrib import messages
 from django.db.models import F, Q, Count, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django import forms
 from .models import (
     Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
-    Producto, MovimientoStock, GuestKey,
+    Producto, ProductoImagen, MovimientoStock, GuestKey,
 )
 from .decorators import bloquear_invitados
+
+
+class ProductoImagenForm(forms.Form):
+    imagen = forms.ImageField(label='Imagen')
 
 
 def parse_precio(raw):
@@ -337,6 +342,55 @@ def producto_editar(request, pk):
 
 
 @login_required(login_url='login')
+def producto_detalle(request, pk):
+    perfil = request.user.perfil
+    producto = get_object_or_404(
+        Producto.objects.prefetch_related('imagenes', 'opciones__atributo'),
+        pk=pk, empresa=perfil.empresa,
+    )
+    movimientos = MovimientoStock.objects.filter(
+        producto=producto,
+    ).select_related('usuario').order_by('-fecha')[:8]
+    return render(request, 'inventory/producto_detalle.html', {
+        'producto': producto,
+        'movimientos': movimientos,
+        'form_imagen': ProductoImagenForm(),
+    })
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def producto_imagen_subir(request, pk):
+    perfil = request.user.perfil
+    producto = get_object_or_404(Producto, pk=pk, empresa=perfil.empresa)
+    if request.method == 'POST':
+        form = ProductoImagenForm(request.POST, request.FILES)
+        if form.is_valid():
+            imagen = form.cleaned_data['imagen']
+            if imagen.size > 5 * 1024 * 1024:
+                messages.error(request, 'La imagen no puede superar los 5 MB.')
+            else:
+                ProductoImagen.objects.create(producto=producto, imagen=imagen)
+                messages.success(request, 'Imagen agregada a la galería.')
+        else:
+            messages.error(request, 'Imagen inválida. Formatos permitidos: JPG, PNG, WEBP.')
+    return redirect('producto_detalle', pk=pk)
+
+
+@login_required(login_url='login')
+@bloquear_invitados
+def producto_imagen_eliminar(request, pk, imagen_id):
+    perfil = request.user.perfil
+    producto = get_object_or_404(Producto, pk=pk, empresa=perfil.empresa)
+    imagen = get_object_or_404(ProductoImagen, pk=imagen_id, producto=producto)
+    if request.method == 'POST':
+        imagen.imagen.delete(save=False)
+        imagen.delete()
+        messages.success(request, 'Imagen eliminada de la galería.')
+    return redirect('producto_detalle', pk=pk)
+
+
+@login_required(login_url='login')
 @bloquear_invitados
 def stock_movimiento(request, pk):
     perfil = request.user.perfil
@@ -404,6 +458,8 @@ def stock_rapido(request, pk):
                 cantidad=1, motivo='Reposición rápida',
             )
             messages.success(request, f'Reposición registrada: "{producto.nombre}". Stock: {producto.stock_actual}')
+    if request.POST.get('volver') == 'detalle':
+        return redirect('producto_detalle', pk=pk)
     return redirect('producto_lista')
 
 

@@ -101,6 +101,19 @@ class Producto(models.Model):
         return resultado
 
 
+class ProductoImagen(models.Model):
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE, related_name='imagenes')
+    imagen = models.ImageField(upload_to='productos/')
+    orden = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['orden', 'created_at']
+
+    def __str__(self):
+        return f"Imagen de {self.producto.nombre}"
+
+
 class GuestKey(models.Model):
     DURACION = 8 * 60 * 60
 

@@ -135,7 +135,7 @@
           <tbody class="divide-y divide-gray-100">
             {% for p in productos_recientes %}
             <tr class="hover:bg-gray-50">
-              <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ p.nombre }}</td>
+              <td class="px-6 py-4 text-sm font-medium text-gray-900"><a href="{% url 'producto_detalle' p.pk %}" class="hover:text-brand-700 hover:underline">{{ p.nombre }}</a></td>
               <td class="px-6 py-4 text-sm text-gray-500">{{ p.codigo_barras|default:"-" }}</td>
               <td class="px-6 py-4 text-sm text-gray-700">{{ p.stock_actual }}</td>
               <td class="px-6 py-4 text-sm text-gray-700">${{ p.precio_venta|currency_ar }}</td>

@@ -317,3 +317,112 @@ class ReporteTests(TestCase):
         r = self.client.get(reverse('reporte'), {'rango': '30d', 'export': 'pdf'})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r['Content-Type'], 'application/pdf')
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class ProductoDetalleTests(TestCase):
+    def setUp(self):
+        import io
+        import shutil
+        import tempfile
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        self._SimpleUploadedFile = SimpleUploadedFile
+        buf = io.BytesIO()
+        Image.new('RGB', (8, 8), 'red').save(buf, format='PNG')
+        self._png = buf.getvalue()
+
+        media = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, media, ignore_errors=True)
+        self._media_override = override_settings(MEDIA_ROOT=media)
+        self._media_override.enable()
+        self.addCleanup(self._media_override.disable)
+
+        self.empresa = Empresa.objects.create(nombre='Det')
+        self.empresa2 = Empresa.objects.create(nombre='Otra')
+        self.owner = User.objects.create_user('detuser', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.producto = Producto.objects.create(
+            empresa=self.empresa, nombre='Cafetera',
+            descripcion='Cafetera italiana de aluminio, 6 tazas.',
+            precio_venta=Decimal('25000.00'), stock_actual=3,
+        )
+        self.ajeno = Producto.objects.create(
+            empresa=self.empresa2, nombre='Ajeno',
+            descripcion='Producto de otra empresa',
+        )
+
+    def _login_invitado(self):
+        self.client.logout()
+        clave = GuestKey.objects.create(
+            empresa=self.empresa, created_by=self.owner,
+            key='guest-det', expires_at=timezone.now() + timedelta(seconds=GuestKey.DURACION),
+        )
+        self.client.post(reverse('invitado'), {'guest_key': clave.key})
+
+    def test_detalle_muestra_descripcion(self):
+        self.client.login(username='detuser', password='p12345')
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'Cafetera italiana de aluminio')
+        self.assertContains(r, 'Cafetera')
+
+    def test_detalle_404_empresa_ajena(self):
+        self.client.login(username='detuser', password='p12345')
+        r = self.client.get(reverse('producto_detalle', args=[self.ajeno.pk]))
+        self.assertEqual(r.status_code, 404)
+
+    def test_detalle_requiere_login(self):
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertEqual(r.status_code, 302)
+        self.assertIn(reverse('login'), r['Location'])
+
+    def test_invitado_ve_detalle_sin_botones(self):
+        self._login_invitado()
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'Cafetera italiana de aluminio')
+        self.assertNotContains(r, reverse('producto_editar', args=[self.producto.pk]))
+
+    def test_lista_linkea_al_detalle(self):
+        self.client.login(username='detuser', password='p12345')
+        r = self.client.get(reverse('producto_lista'))
+        self.assertContains(r, reverse('producto_detalle', args=[self.producto.pk]))
+
+    def test_subir_imagen_a_galeria(self):
+        self.client.login(username='detuser', password='p12345')
+        img = self._SimpleUploadedFile('foto.png', self._png, content_type='image/png')
+        r = self.client.post(
+            reverse('producto_imagen_subir', args=[self.producto.pk]),
+            {'imagen': img},
+        )
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.producto.imagenes.count(), 1)
+        r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
+        self.assertContains(r, '/media/productos/')
+
+    def test_invitado_no_puede_subir_imagen(self):
+        self._login_invitado()
+        img = self._SimpleUploadedFile('foto.png', self._png, content_type='image/png')
+        self.client.post(
+            reverse('producto_imagen_subir', args=[self.producto.pk]),
+            {'imagen': img},
+        )
+        self.assertEqual(self.producto.imagenes.count(), 0)
+
+    def test_eliminar_imagen(self):
+        self.client.login(username='detuser', password='p12345')
+        img = self._SimpleUploadedFile('foto.png', self._png, content_type='image/png')
+        self.client.post(
+            reverse('producto_imagen_subir', args=[self.producto.pk]),
+            {'imagen': img},
+        )
+        imagen = self.producto.imagenes.first()
+        self.client.post(
+            reverse('producto_imagen_eliminar', args=[self.producto.pk, imagen.pk]),
+        )
+        self.assertEqual(self.producto.imagenes.count(), 0)

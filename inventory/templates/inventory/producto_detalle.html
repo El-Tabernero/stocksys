@@ -1,0 +1,165 @@
+{% extends "inventory/base.html" %}
+{% load formato %}
+
+{% block title %}{{ producto.nombre }} - StockSys{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gray-100">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="mb-6">
+      <a href="{% url 'producto_lista' %}" class="text-sm text-brand-600 hover:text-brand-700 font-medium">&larr; Volver a Productos</a>
+    </div>
+
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">{{ producto.nombre }}</h1>
+        <div class="flex flex-wrap items-center gap-2 mt-2 text-sm text-gray-500">
+          {% if producto.codigo_barras %}<span>Código: {{ producto.codigo_barras }}</span>{% endif %}
+          {% if producto.categoria %}
+          <span class="bg-gray-100 px-2 py-0.5 rounded text-xs font-medium text-gray-600">{{ producto.categoria.nombre }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        {% if not es_invitado %}
+        <form method="post" action="{% url 'stock_rapido' producto.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="vender">
+          <input type="hidden" name="volver" value="detalle">
+          <button type="submit" class="bg-white border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition">&minus;1 Venta</button>
+        </form>
+        <form method="post" action="{% url 'stock_rapido' producto.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="accion" value="reponer">
+          <input type="hidden" name="volver" value="detalle">
+          <button type="submit" class="bg-white border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition">+1 Reponer</button>
+        </form>
+        <a href="{% url 'stock_movimiento' producto.pk %}" class="bg-white border border-gray-300 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg hover:bg-gray-50 transition">Movimientos</a>
+        <a href="{% url 'producto_editar' producto.pk %}" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">Editar</a>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="bg-{% if message.tags == 'success' %}green{% else %}red{% endif %}-50 border border-{% if message.tags == 'success' %}green{% else %}red{% endif %}-200 text-{% if message.tags == 'success' %}green{% else %}red{% endif %}-700 text-sm rounded-lg px-4 py-3 mb-4">
+      {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-900">Galería de imágenes</h2>
+            {% if not es_invitado %}
+            <form method="post" action="{% url 'producto_imagen_subir' producto.pk %}" enctype="multipart/form-data" class="flex items-center gap-2">
+              {% csrf_token %}
+              {{ form_imagen.imagen }}
+              <button type="submit" class="bg-brand-600 text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-brand-700 transition">Subir</button>
+            </form>
+            {% endif %}
+          </div>
+
+          {% if producto.imagenes.all %}
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {% for img in producto.imagenes.all %}
+            <div class="relative group">
+              <img src="{{ img.imagen.url }}" alt="{{ producto.nombre }}" class="w-full h-40 object-cover rounded-lg border border-gray-200">
+              {% if not es_invitado %}
+              <form method="post" action="{% url 'producto_imagen_eliminar' producto.pk img.pk %}" class="absolute top-2 right-2">
+                {% csrf_token %}
+                <button type="submit" class="bg-red-600 text-white text-xs font-medium px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition" title="Eliminar imagen">&times;</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="border-2 border-dashed border-gray-200 rounded-lg py-10 text-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p class="text-sm text-gray-400">Sin imágenes todavía</p>
+            {% if not es_invitado %}
+            <p class="text-xs text-gray-400 mt-1">Subí una imagen desde el botón "Subir" de arriba</p>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">Descripción</h2>
+          {% if producto.descripcion %}
+          <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ producto.descripcion }}</p>
+          {% else %}
+          <p class="text-sm text-gray-400 italic">Sin descripción cargada.</p>
+          {% endif %}
+        </div>
+
+        {% with attrs=producto.atributos_agrupados %}
+        {% if attrs %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">Atributos</h2>
+          <div class="flex flex-wrap gap-2">
+            {% for nombre, valores in attrs.items %}
+            {% for v in valores %}
+            <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">{{ nombre }}: {{ v }}</span>
+            {% endfor %}
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+      </div>
+
+      <div class="space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <p class="text-sm text-gray-500 mb-1">Precio de venta</p>
+          <p class="text-3xl font-bold text-gray-900">{{ producto.precio_venta|currency_ar }}</p>
+          <p class="text-sm text-gray-500 mt-2">Costo: {{ producto.precio_costo|currency_ar }}</p>
+          <hr class="my-4 border-gray-100">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-gray-500">Stock actual</span>
+            <span class="text-xl font-bold text-gray-900">{{ producto.stock_actual }}</span>
+          </div>
+          <div class="mt-3">
+            {% if producto.stock_actual > producto.stock_minimo %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">OK</span>
+            {% elif producto.stock_actual > 0 %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Bajo (mínimo {{ producto.stock_minimo }})</span>
+            {% else %}
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Sin stock</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 class="text-lg font-semibold text-gray-900 mb-3">Últimos movimientos</h2>
+          <div class="space-y-3">
+            {% for m in movimientos %}
+            <div class="flex items-center justify-between text-sm">
+              <div class="flex items-center gap-2">
+                {% if m.tipo == 'IN' %}
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-bold">+</span>
+                {% else %}
+                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700 text-xs font-bold">&minus;</span>
+                {% endif %}
+                <span class="text-gray-700">{{ m.cantidad }} {{ m.motivo|default:"" }}</span>
+              </div>
+              <span class="text-xs text-gray-400">{{ m.fecha|date:"d/m/Y H:i" }}</span>
+            </div>
+            {% empty %}
+            <p class="text-sm text-gray-400 italic">Sin movimientos registrados.</p>
+            {% endfor %}
+          </div>
+          {% if not es_invitado %}
+          <a href="{% url 'stock_movimiento' producto.pk %}" class="block text-center text-sm font-medium text-brand-600 hover:text-brand-700 mt-4">Ver todos &rarr;</a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
