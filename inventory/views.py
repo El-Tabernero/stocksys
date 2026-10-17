@@ -447,7 +447,20 @@ def stock_movimiento(request, pk):
                 'producto': producto, 'movimientos': movimientos, 'tipo_seleccionado': tipo,
             })
 
-        cantidad = int(cantidad)
+        try:
+            cantidad = int(cantidad)
+        except (TypeError, ValueError):
+            messages.error(request, 'La cantidad debe ser un número entero.')
+            return render(request, 'inventory/stock_movimiento.html', {
+                'producto': producto, 'movimientos': movimientos, 'tipo_seleccionado': tipo,
+            })
+
+        if cantidad < 1:
+            messages.error(request, 'La cantidad debe ser mayor a cero.')
+            return render(request, 'inventory/stock_movimiento.html', {
+                'producto': producto, 'movimientos': movimientos, 'tipo_seleccionado': tipo,
+            })
+
         if tipo == MovimientoStock.TipoMovimiento.SALIDA and cantidad > producto.stock_actual:
             messages.error(request, f'Stock insuficiente. Solo hay {producto.stock_actual} unidades.')
             return render(request, 'inventory/stock_movimiento.html', {

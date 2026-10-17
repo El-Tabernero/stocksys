@@ -1,12 +1,17 @@
 from datetime import timedelta
 from decimal import Decimal
+import uuid
 
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Empresa, PerfilUsuario, Categoria, Producto, ProductoImagen, GuestKey, MovimientoStock
+from .models import (
+    Empresa, PerfilUsuario, Categoria, Producto, ProductoImagen,
+    GuestKey, MovimientoStock, Cliente, Orden, OrdenItem,
+)
 
 
 @override_settings(
@@ -486,3 +491,204 @@ class ProductoDetalleTests(TestCase):
         r = self.client.get(reverse('producto_detalle', args=[self.producto.pk]))
         self.assertNotContains(r, reverse('producto_imagen_agregar', args=[self.producto.pk]))
         self.assertNotContains(r, reverse('producto_imagen_subir', args=[self.producto.pk]))
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class ApiPublicaTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='Tienda A', activa=True)
+        self.empresa_b = Empresa.objects.create(nombre='Tienda B', activa=True)
+        self.cat = Categoria.objects.create(empresa=self.empresa, nombre='Electronica')
+        self.p1 = Producto.objects.create(
+            empresa=self.empresa, categoria=self.cat, nombre='Auriculares',
+            descripcion='Bluetooth con cancelacion de ruido',
+            precio_venta=Decimal('15000.00'), stock_actual=3,
+        )
+        self.p2 = Producto.objects.create(
+            empresa=self.empresa, nombre='Parlante',
+            precio_venta=Decimal('9000.00'), stock_actual=0,
+        )
+        self.ajeno = Producto.objects.create(
+            empresa=self.empresa_b, nombre='Producto ajeno',
+            precio_venta=Decimal('1000.00'), stock_actual=5,
+        )
+        self.url_lista = reverse('api_productos', args=[self.empresa.pk])
+
+    def _get(self, url, params=None):
+        return self.client.get(url, params or {}, HTTP_ACCEPT='application/json')
+
+    def _post(self, url, payload):
+        return self.client.post(url, payload, content_type='application/json')
+
+    def test_catalogo_aislado_por_empresa(self):
+        r = self._get(self.url_lista)
+        self.assertEqual(r.status_code, 200)
+        nombres = [p['nombre'] for p in r.json()]
+        self.assertIn('Auriculares', nombres)
+        self.assertNotIn('Producto ajeno', nombres)
+
+    def test_catalogo_filtros_q_y_stock(self):
+        r = self._get(self.url_lista, {'q': 'auri'})
+        self.assertEqual(len(r.json()), 1)
+        r = self._get(self.url_lista, {'solo_con_stock': '1'})
+        nombres = [p['nombre'] for p in r.json()]
+        self.assertIn('Auriculares', nombres)
+        self.assertNotIn('Parlante', nombres)
+
+    def test_detalle_publico_completo(self):
+        ProductoImagen.objects.create(producto=self.p1, url='https://i.imgur.com/x.png')
+        r = self._get(reverse('api_producto_detalle', args=[self.empresa.pk, self.p1.pk]))
+        data = r.json()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(data['descripcion'], 'Bluetooth con cancelacion de ruido')
+        self.assertEqual(data['categoria'], 'Electronica')
+        self.assertEqual(data['precio_venta'], '15000.00')
+        self.assertEqual(data['imagenes'][0]['src'], 'https://i.imgur.com/x.png')
+        self.assertEqual(data['imagenes'][0]['origen'], 'i.imgur.com')
+        self.assertTrue(data['disponible'])
+
+    def test_detalle_disponible_false_sin_stock(self):
+        r = self._get(reverse('api_producto_detalle', args=[self.empresa.pk, self.p2.pk]))
+        self.assertFalse(r.json()['disponible'])
+
+    def test_detalle_404_producto_ajeno(self):
+        r = self._get(reverse('api_producto_detalle', args=[self.empresa.pk, self.ajeno.pk]))
+        self.assertEqual(r.status_code, 404)
+
+    def test_empresa_inactiva_404(self):
+        self.empresa.activa = False
+        self.empresa.save()
+        r = self._get(self.url_lista)
+        self.assertEqual(r.status_code, 404)
+
+    def test_categorias_endpoint(self):
+        r = self._get(reverse('api_categorias', args=[self.empresa.pk]))
+        nombres = [c['nombre'] for c in r.json()]
+        self.assertIn('Electronica', nombres)
+
+    def test_checkout_crea_orden_total_server(self):
+        payload = {
+            'nombre': 'Maria Lopez', 'email': 'maria@correo.com',
+            'items': [{'producto': self.p1.pk, 'cantidad': 2}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 201)
+        data = r.json()
+        self.assertEqual(Decimal(data['total']), Decimal('30000.00'))
+        self.assertEqual(data['estado'], 'PENDIENTE')
+        self.assertEqual(len(data['items']), 1)
+        self.assertEqual(Orden.objects.count(), 1)
+        self.assertTrue(Cliente.objects.filter(
+            empresa=self.empresa, email='maria@correo.com',
+        ).exists())
+
+    def test_checkout_descuenta_stock(self):
+        payload = {
+            'nombre': 'Ana', 'email': 'ana@correo.com',
+            'items': [{'producto': self.p1.pk, 'cantidad': 2}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 201)
+        self.p1.refresh_from_db()
+        self.assertEqual(self.p1.stock_actual, 1)
+        mov = MovimientoStock.objects.get(producto=self.p1)
+        self.assertEqual(mov.tipo, MovimientoStock.TipoMovimiento.SALIDA)
+        self.assertEqual(mov.cantidad, 2)
+        self.assertTrue(mov.motivo.startswith('Orden'))
+
+    def test_checkout_sin_stock_400(self):
+        payload = {
+            'nombre': 'Ana', 'email': 'ana@correo.com',
+            'items': [{'producto': self.p1.pk, 'cantidad': 50}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Orden.objects.count(), 0)
+        self.p1.refresh_from_db()
+        self.assertEqual(self.p1.stock_actual, 3)
+
+    def test_checkout_items_vacios_400(self):
+        payload = {'nombre': 'Ana', 'email': 'ana@correo.com', 'items': []}
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Orden.objects.count(), 0)
+
+    def test_checkout_producto_ajeno_400(self):
+        payload = {
+            'nombre': 'Ana', 'email': 'ana@correo.com',
+            'items': [{'producto': self.ajeno.pk, 'cantidad': 1}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Orden.objects.count(), 0)
+
+    def test_checkout_email_invalido_400(self):
+        payload = {
+            'nombre': 'Ana', 'email': 'no-es-email',
+            'items': [{'producto': self.p1.pk, 'cantidad': 1}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        self.assertEqual(r.status_code, 400)
+
+    def test_orden_detalle_por_uuid(self):
+        payload = {
+            'nombre': 'Ana', 'email': 'ana@correo.com',
+            'items': [{'producto': self.p1.pk, 'cantidad': 1}],
+        }
+        r = self._post(reverse('api_crear_orden', args=[self.empresa.pk]), payload)
+        orden_id = r.json()['id']
+        r = self._get(reverse('api_orden_detalle', args=[orden_id]))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(Decimal(r.json()['total']), Decimal('15000.00'))
+        r = self._get(reverse('api_orden_detalle', args=[str(uuid.uuid4())]))
+        self.assertEqual(r.status_code, 404)
+
+
+@override_settings(
+    DEBUG=True, SECURE_SSL_REDIRECT=False,
+    SESSION_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False,
+)
+class MovimientoStockReglasTests(TestCase):
+    def setUp(self):
+        self.empresa = Empresa.objects.create(nombre='E1')
+        self.empresa2 = Empresa.objects.create(nombre='E2')
+        self.owner = User.objects.create_user('reglas', password='p12345')
+        PerfilUsuario.objects.create(user=self.owner, empresa=self.empresa)
+        self.producto = Producto.objects.create(
+            empresa=self.empresa, nombre='Item', stock_actual=5,
+        )
+
+    def _crear(self, **kwargs):
+        base = dict(
+            empresa=self.empresa, producto=self.producto,
+            usuario=self.owner, tipo='OUT', cantidad=2, motivo='x',
+        )
+        base.update(kwargs)
+        return MovimientoStock.objects.create(**base)
+
+    def test_cantidad_cero_invalida(self):
+        with self.assertRaises(ValidationError):
+            self._crear(cantidad=0)
+
+    def test_cantidad_negativa_invalida(self):
+        with self.assertRaises(ValidationError):
+            self._crear(cantidad=-3)
+
+    def test_empresa_incoherente_invalida(self):
+        with self.assertRaises(ValidationError):
+            self._crear(empresa=self.empresa2)
+
+    def test_stock_se_acumula(self):
+        self._crear(cantidad=2)
+        self._crear(cantidad=1)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 2)
+        self.assertEqual(MovimientoStock.objects.count(), 2)
+
+    def test_entrada_aumenta_stock(self):
+        self._crear(tipo='IN', cantidad=4)
+        self.producto.refresh_from_db()
+        self.assertEqual(self.producto.stock_actual, 9)

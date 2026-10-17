@@ -1,6 +1,9 @@
+import uuid
 from urllib.parse import urlparse
 
 from django.db import models
+from django.db.models import F
+from django.db import transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -35,7 +38,9 @@ class Categoria(models.Model):
     descripcion = models.TextField(blank=True, null=True)
 
     class Meta:
-        unique_together = ('empresa', 'nombre')
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'nombre'], name='uniq_categoria_empresa_nombre'),
+        ]
         verbose_name_plural = "Categorías"
 
     def __str__(self):
@@ -47,7 +52,9 @@ class Atributo(models.Model):
     nombre = models.CharField(max_length=100)
 
     class Meta:
-        unique_together = ('empresa', 'nombre')
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'nombre'], name='uniq_atributo_empresa_nombre'),
+        ]
         verbose_name_plural = "Atributos"
 
     def __str__(self):
@@ -59,7 +66,9 @@ class OpcionAtributo(models.Model):
     valor = models.CharField(max_length=100)
 
     class Meta:
-        unique_together = ('atributo', 'valor')
+        constraints = [
+            models.UniqueConstraint(fields=['atributo', 'valor'], name='uniq_opcion_atributo_valor'),
+        ]
         verbose_name_plural = "Opciones de Atributos"
         ordering = ['atributo', 'valor']
 
@@ -83,7 +92,9 @@ class Producto(models.Model):
     stock_minimo = models.IntegerField(default=5)
 
     class Meta:
-        unique_together = ('empresa', 'codigo_barras')
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'codigo_barras'], name='uniq_producto_empresa_codigo'),
+        ]
 
     def __str__(self):
         return f"{self.nombre} - Stock: {self.stock_actual}"
@@ -180,11 +191,80 @@ class MovimientoStock(models.Model):
     def __str__(self):
         return f"{self.get_tipo_display()} - {self.producto.nombre} ({self.cantidad})"
 
+    def clean(self):
+        super().clean()
+        if self.cantidad is not None and self.cantidad <= 0:
+            raise ValidationError("La cantidad debe ser mayor a cero.")
+        if self.producto and self.empresa_id and self.producto.empresa_id != self.empresa_id:
+            raise ValidationError("El producto no pertenece a esta empresa.")
+
     def save(self, *args, **kwargs):
         if not self.pk:
+            if self.cantidad is None or self.cantidad <= 0:
+                raise ValidationError("La cantidad debe ser mayor a cero.")
+            if self.producto and self.empresa_id and self.producto.empresa_id != self.empresa_id:
+                raise ValidationError("El producto no pertenece a esta empresa.")
             delta = abs(self.cantidad)
             if self.tipo == self.TipoMovimiento.SALIDA:
                 delta = -delta
-            self.producto.stock_actual += delta
-            self.producto.save()
+            with transaction.atomic():
+                super().save(*args, **kwargs)
+                Producto.objects.filter(pk=self.producto_id).update(
+                    stock_actual=F('stock_actual') + delta,
+                )
+            self.producto.refresh_from_db(fields=['stock_actual'])
+            return
         super().save(*args, **kwargs)
+
+
+class Cliente(models.Model):
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='clientes')
+    nombre = models.CharField(max_length=150)
+    email = models.EmailField()
+    telefono = models.CharField(max_length=30, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'email'], name='uniq_cliente_empresa_email'),
+        ]
+
+    def __str__(self):
+        return f"{self.nombre} <{self.email}>"
+
+
+class Orden(models.Model):
+    class Estado(models.TextChoices):
+        PENDIENTE = 'PENDIENTE', 'Pendiente de pago'
+        PAGADA = 'PAGADA', 'Pagada'
+        ENVIADA = 'ENVIADA', 'Enviada'
+        CANCELADA = 'CANCELADA', 'Cancelada'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    empresa = models.ForeignKey(Empresa, on_delete=models.CASCADE, related_name='ordenes')
+    cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT, related_name='ordenes')
+    estado = models.CharField(max_length=20, choices=Estado.choices, default=Estado.PENDIENTE)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    direccion_envio = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Orden {str(self.id)[:8]} ({self.get_estado_display()})"
+
+
+class OrdenItem(models.Model):
+    orden = models.ForeignKey(Orden, on_delete=models.CASCADE, related_name='items')
+    producto = models.ForeignKey(Producto, on_delete=models.PROTECT, related_name='orden_items')
+    cantidad = models.PositiveIntegerField()
+    precio_unitario = models.DecimalField(max_digits=12, decimal_places=2)
+
+    @property
+    def subtotal(self):
+        return self.precio_unitario * self.cantidad
+
+    def __str__(self):
+        return f"{self.cantidad}x {self.producto.nombre}"

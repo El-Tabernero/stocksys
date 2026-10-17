@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Empresa, PerfilUsuario, Categoria, Atributo, OpcionAtributo,
-    Producto, MovimientoStock, GuestKey,
+    Producto, ProductoImagen, MovimientoStock, GuestKey,
+    Cliente, Orden, OrdenItem,
 )
 
 
@@ -73,3 +74,31 @@ class GuestKeyAdmin(admin.ModelAdmin):
     list_filter = ['empresa']
     search_fields = ['key']
     readonly_fields = ['created_at']
+
+
+@admin.register(ProductoImagen)
+class ProductoImagenAdmin(admin.ModelAdmin):
+    list_display = ['producto', 'url', 'imagen', 'orden', 'created_at']
+    list_filter = ['producto__empresa']
+
+
+@admin.register(Cliente)
+class ClienteAdmin(admin.ModelAdmin):
+    list_display = ['nombre', 'email', 'telefono', 'empresa', 'created_at']
+    list_filter = ['empresa']
+    search_fields = ['nombre', 'email']
+
+
+class OrdenItemInline(admin.TabularInline):
+    model = OrdenItem
+    extra = 0
+    readonly_fields = ['producto', 'cantidad', 'precio_unitario']
+
+
+@admin.register(Orden)
+class OrdenAdmin(admin.ModelAdmin):
+    list_display = ['id', 'cliente', 'empresa', 'estado', 'total', 'created_at']
+    list_filter = ['estado', 'empresa']
+    search_fields = ['id', 'cliente__nombre', 'cliente__email']
+    readonly_fields = ['id', 'created_at', 'total']
+    inlines = [OrdenItemInline]

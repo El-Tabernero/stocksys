@@ -1,4 +1,5 @@
 from django.urls import path
+from . import api as api_views
 from . import views
 
 urlpatterns = [
@@ -26,4 +27,9 @@ urlpatterns = [
     path('atributos/agregar/', views.atributo_agregar, name='atributo_agregar'),
     path('atributos/<int:pk>/editar/', views.atributo_editar, name='atributo_editar'),
     path('atributos/<int:pk>/eliminar/', views.atributo_eliminar, name='atributo_eliminar'),
+    path('api/empresas/<int:empresa_pk>/productos/', api_views.api_productos, name='api_productos'),
+    path('api/empresas/<int:empresa_pk>/productos/<int:pk>/', api_views.api_producto_detalle, name='api_producto_detalle'),
+    path('api/empresas/<int:empresa_pk>/categorias/', api_views.api_categorias, name='api_categorias'),
+    path('api/empresas/<int:empresa_pk>/ordenes/', api_views.api_crear_orden, name='api_crear_orden'),
+    path('api/ordenes/<uuid:pk>/', api_views.api_orden_detalle, name='api_orden_detalle'),
 ]
